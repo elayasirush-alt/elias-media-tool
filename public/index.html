@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elias Media</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="topbar" aria-label="App header">
+        <div class="brand">
+          <div class="brand-mark">EM</div>
+          <div>
+            <strong>Elias Media</strong>
+            <span>Smart media search dashboard</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span class="safe-badge">License-aware</span>
+          <span class="safe-badge dim">Local MVP</span>
+        </div>
+      </nav>
+
+      <section class="hero-card">
+        <div class="hero-copy">
+          <p class="eyebrow">Find footage faster</p>
+          <h1>Search stock footage, archive clips, Canva terms, and reference videos from one clean dashboard.</h1>
+          <p class="lead">Search stock, archive, premium, social, Canva terms, and reference platforms from one clean dashboard. Direct API results appear where allowed. Everything else opens the official source so you can check rights first.</p>
+          <div class="hero-pills">
+            <span>Pexels API</span>
+            <span>YouTube references</span>
+            <span>NASA archive</span>
+            <span>Canva terms</span>
+            <span>Premium stock links</span>
+          </div>
+        </div>
+        <div class="stats-card" aria-label="Source summary">
+          <div>
+            <strong>50+</strong>
+            <span>Search sources</span>
+          </div>
+          <div>
+            <strong>5</strong>
+            <span>Source categories</span>
+          </div>
+          <div>
+            <strong>Safe</strong>
+            <span>Download labels</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="notice">
+        <div class="notice-icon">!</div>
+        <p><strong>Rights reminder:</strong> this tool helps you find media faster. It does not grant reuse rights. Download only from free stock sources, your own media, public-domain items, or properly licensed platforms.</p>
+      </section>
+
+      <section class="search-card">
+        <div class="search-head">
+          <div>
+            <h2>Start a search</h2>
+            <p>Use practical editing keywords like “busy city night crowd” or “space shuttle launch 4k”.</p>
+          </div>
+        </div>
+        <form id="searchForm" class="search-form">
+          <label class="query-label">
+            Search topic
+            <input id="query" type="text" placeholder="abandoned town sunset, busy city night, old bridge aerial" required />
+          </label>
+          <label>
+            Format
+            <select id="orientation">
+              <option value="any">Any</option>
+              <option value="landscape">Landscape 16:9</option>
+              <option value="portrait">Vertical 9:16</option>
+              <option value="square">Square 1:1</option>
+            </select>
+          </label>
+          <label>
+            Results
+            <select id="perPage">
+              <option value="6">6</option>
+              <option value="8" selected>8</option>
+              <option value="12">12</option>
+              <option value="16">16</option>
+            </select>
+          </label>
+          <button class="primary-btn" type="submit">Search radar</button>
+        </form>
+        <div class="examples" aria-label="Example searches">
+          <button type="button" data-query="abandoned town sunset">abandoned town sunset</button>
+          <button type="button" data-query="busy city night walking crowd">busy city night</button>
+          <button type="button" data-query="Mars rover">Mars rover</button>
+          <button type="button" data-query="old bridge aerial footage">old bridge aerial</button>
+        </div>
+      </section>
+
+
+      <section class="search-card timeline-card">
+        <div class="search-head">
+          <div>
+            <h2>Timestamped script mode</h2>
+            <p>Paste a script with timestamps and add the main topic. Elias Media gives only 3 strong search terms and keeps the media results on-topic.</p>
+          </div>
+        </div>
+        <form id="timelineForm" class="timeline-form">
+          <label class="script-label">
+            Main topic / niche
+            <input id="topicInput" type="text" placeholder="Example: Toyota Tundra truck recall, cars, pickup trucks, automotive" />
+          </label>
+          <label class="script-label">
+            Timestamped script
+            <textarea id="scriptInput" rows="10" placeholder="00:00 The city is quiet before sunrise.&#10;00:08 A busy street begins to fill with people.&#10;00:16 The camera moves toward an old bridge."></textarea>
+          </label>
+          <div class="timeline-controls">
+            <label>
+              Format
+              <select id="timelineOrientation">
+                <option value="any">Any</option>
+                <option value="landscape">Landscape 16:9</option>
+                <option value="portrait">Vertical 9:16</option>
+                <option value="square">Square 1:1</option>
+              </select>
+            </label>
+            <label>
+              Results per timestamp
+              <select id="timelinePerTimestamp">
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+            <button class="primary-btn" type="submit">Analyze script</button>
+          </div>
+        </form>
+        <div class="examples" aria-label="Script examples">
+          <button type="button" id="loadScriptExample">Load example script</button>
+        </div>
+      </section>
+
+      <section id="timelineSection" class="results-section hidden">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Scene by scene</p>
+            <h2>Timestamp media plan</h2>
+            <p>Each timestamp gets 3 search terms plus clips from Pexels, Pixabay, YouTube references, and photos from Unsplash.</p>
+          </div>
+        </div>
+        <div id="timelineResults"></div>
+      </section>
+
+      <div id="status" class="status"></div>
+
+      <section id="apiSection" class="results-section hidden">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Live results</p>
+            <h2>Direct API results</h2>
+            <p>Pexels, Pixabay, YouTube, NASA, and Archive appear here when available. YouTube is reference only.</p>
+          </div>
+        </div>
+        <div id="apiResults"></div>
+      </section>
+
+      <section id="canvaToolkitSection" class="results-section hidden">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Canva stock helper</p>
+            <h2>Canva search assistant</h2>
+            <p>Use these helpers to search Canva stock videos and photos faster without leaving a safe workflow.</p>
+          </div>
+        </div>
+        <div id="canvaToolkit"></div>
+      </section>
+
+      <section id="canvaSection" class="results-section hidden">
+        <div class="section-header">
+          <p class="section-kicker">Quick copy terms</p>
+          <h2>Starter Canva search terms</h2>
+          <p>Fast copy terms for Canva’s Videos or Photos search bar. These are the quickest first searches to try.</p>
+        </div>
+        <div id="canvaTerms" class="terms"></div>
+      </section>
+
+      <section id="sourceLinksSection" class="results-section hidden">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Open everywhere</p>
+            <h2>Source radar</h2>
+            <p>Open the same topic across social, free stock, archive, premium stock, Canva, and Google helpers.</p>
+          </div>
+        </div>
+        <div id="sourceLinks" class="source-links"></div>
+      </section>
+
+      <footer class="footer">
+        <span>Elias Media</span>
+        <span>Built for faster media research and safer sourcing.</span>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
