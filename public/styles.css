@@ -614,3 +614,37 @@ button:hover, .button-link:hover { filter: brightness(1.08); transform: translat
     grid-template-columns: 1fr;
   }
 }
+
+.logout-pill { text-decoration: none; color: inherit; }
+
+.secondary-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 11px 14px;
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+}
+.hidden { display: none !important; }
+
+.logout-link { text-decoration:none; }
+.source-toggle-row { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-top:14px; }
+.source-toggle-row label { display:flex; align-items:center; gap:6px; font-size:14px; color:var(--muted); }
+.action-row-wrap { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+.assistant-grid, .history-grid, .admin-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+.assistant-card, .history-card, .admin-card { border:1px solid var(--border); border-radius:18px; padding:16px; background:rgba(255,255,255,0.03); }
+.assistant-card.full-width { grid-column:1 / -1; }
+.admin-card strong { display:block; font-size:28px; margin-bottom:8px; }
+.history-card strong { display:block; margin-bottom:6px; }
+.history-card p { color:var(--muted); }
+.guide-table { display:grid; gap:12px; }
+.guide-row { display:grid; gap:4px; padding:12px; border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,0.02); }
+.select-download { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+.link-wrap a { margin-bottom:8px; }
+@media print {
+  body { background:white; color:black; }
+  .topbar, .search-card, .footer, .notice, #historySection, #adminSection, #apiSection, #canvaToolkitSection, #canvaSection, #sourceLinksSection { display:none !important; }
+  .timeline-item, .assistant-card, .guide-row { break-inside: avoid; color:black; border-color:#ccc; }
+  .shell { max-width:none; padding:0; }
+}

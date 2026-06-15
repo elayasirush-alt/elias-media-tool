@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 
 dotenv.config();
@@ -14,7 +15,181 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+function authToken() {
+  const password = process.env.APP_PASSWORD || "";
+  const username = process.env.APP_USERNAME || "admin";
+  if (!password) return "";
+  return crypto.createHmac("sha256", password).update(username).digest("hex");
+}
+
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    String(header)
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        if (index === -1) return [part, ""];
+        return [decodeURIComponent(part.slice(0, index)), decodeURIComponent(part.slice(index + 1))];
+      })
+  );
+}
+
+function loginPage(error = "") {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Elias Media Login</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Arial, sans-serif; color: #eef6ff; background: radial-gradient(circle at top left, #12345a, #07111f 45%, #030711); }
+    .card { width: min(420px, calc(100% - 32px)); border: 1px solid rgba(148, 163, 184, .25); border-radius: 24px; padding: 28px; background: rgba(8, 14, 28, .88); box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    p { color: #a9b8d0; line-height: 1.5; }
+    label { display: block; margin: 16px 0 7px; color: #dbeafe; font-weight: 700; }
+    input { width: 100%; box-sizing: border-box; border: 1px solid rgba(148, 163, 184, .35); border-radius: 14px; padding: 14px; background: #050b16; color: #fff; font-size: 16px; }
+    button { width: 100%; margin-top: 20px; border: 0; border-radius: 14px; padding: 14px 18px; background: linear-gradient(135deg, #38bdf8, #818cf8); color: #06111f; font-weight: 900; font-size: 16px; cursor: pointer; }
+    .error { margin-top: 14px; padding: 12px; border-radius: 12px; color: #fecaca; background: rgba(239, 68, 68, .12); border: 1px solid rgba(248, 113, 113, .35); }
+    small { color: #8ea2bd; display: block; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <h1>Elias Media</h1>
+    <p>Enter your private login to access the media search dashboard.</p>
+    <label>Username</label>
+    <input name="username" autocomplete="username" required />
+    <label>Password</label>
+    <input name="password" type="password" autocomplete="current-password" required />
+    <button type="submit">Login</button>
+    ${error ? `<div class="error">${error}</div>` : ""}
+    <small>Password protection is controlled from Render environment variables.</small>
+  </form>
+</body>
+</html>`;
+}
+
+app.get("/login", (req, res) => {
+  if (!process.env.APP_PASSWORD) return res.redirect("/");
+  res.send(loginPage());
+});
+
+app.post("/login", (req, res) => {
+  const expectedUsername = process.env.APP_USERNAME || "admin";
+  const expectedPassword = process.env.APP_PASSWORD || "";
+  if (!expectedPassword) return res.redirect("/");
+
+  const username = String(req.body?.username || "");
+  const password = String(req.body?.password || "");
+  if (username === expectedUsername && password === expectedPassword) {
+    const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
+    res.setHeader("Set-Cookie", `em_auth=${authToken()}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
+    return res.redirect("/");
+  }
+  res.status(401).send(loginPage("Wrong username or password."));
+});
+
+app.get("/logout", (req, res) => {
+  res.setHeader("Set-Cookie", "em_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  res.redirect("/login");
+});
+
+function requireLogin(req, res, next) {
+  const expected = authToken();
+  if (!expected) return next();
+  const cookies = parseCookies(req.headers.cookie || "");
+  if (cookies.em_auth === expected) return next();
+  if (req.path.startsWith("/api/")) return res.status(401).json({ error: "Login required." });
+  return res.redirect("/login");
+}
+
+app.use(requireLogin);
 app.use(express.static(path.join(__dirname, "public")));
+
+function cleanFilename(value, fallback = "media") {
+  const safe = String(value || fallback)
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 90)
+    .replace(/^-|-$/g, "");
+  return safe || fallback;
+}
+
+function isAllowedDownloadHost(url) {
+  const host = url.hostname.toLowerCase();
+  return (
+    host === "images.pexels.com" ||
+    host === "videos.pexels.com" ||
+    host.endsWith(".pexels.com") ||
+    host === "cdn.pixabay.com" ||
+    host.endsWith(".pixabay.com") ||
+    host === "images.unsplash.com" ||
+    host === "plus.unsplash.com" ||
+    host === "api.unsplash.com"
+  );
+}
+
+async function resolveUnsplashDownload(downloadLocation) {
+  const key = process.env.UNSPLASH_ACCESS_KEY;
+  if (!downloadLocation || !key) return "";
+  const url = new URL(downloadLocation);
+  if (url.hostname !== "api.unsplash.com") return "";
+
+  const response = await fetch(url.toString(), { headers: { Authorization: `Client-ID ${key}` } });
+  if (!response.ok) return "";
+  const data = await response.json();
+  return data?.url || "";
+}
+
+app.get("/api/download", async (req, res) => {
+  try {
+    const source = String(req.query.source || "").toLowerCase();
+    const requestedUrl = String(req.query.url || "");
+    const downloadLocation = String(req.query.downloadLocation || "");
+    const filename = cleanFilename(req.query.filename || "media-download");
+
+    let mediaUrl = requestedUrl;
+
+    if (source.includes("unsplash") && downloadLocation) {
+      const resolved = await resolveUnsplashDownload(downloadLocation);
+      if (resolved) mediaUrl = resolved;
+    }
+
+    if (!mediaUrl) return res.status(400).send("Missing download URL.");
+
+    const parsed = new URL(mediaUrl);
+    if (!isAllowedDownloadHost(parsed)) return res.status(403).send("This source is not allowed for direct download.");
+
+    const response = await fetch(parsed.toString());
+    if (!response.ok) return res.status(response.status).send("Could not fetch media file.");
+
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const ext = contentType.includes("video") ? ".mp4" : contentType.includes("png") ? ".png" : contentType.includes("webp") ? ".webp" : contentType.includes("jpeg") || contentType.includes("jpg") ? ".jpg" : "";
+    const finalName = filename.toLowerCase().endsWith(ext) || !ext ? filename : `${filename}${ext}`;
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${finalName}"`);
+
+    if (!response.body) return res.status(500).send("No media stream available.");
+    const reader = response.body.getReader();
+    async function pump() {
+      const { done, value } = await reader.read();
+      if (done) return res.end();
+      res.write(Buffer.from(value));
+      return pump();
+    }
+    return pump();
+  } catch (error) {
+    return res.status(500).send(error.message || "Download failed.");
+  }
+});
+
+
 
 const POLICIES = {
   FREE_DOWNLOAD: "Free download",
@@ -368,6 +543,7 @@ async function searchUnsplash({ query, orientation, perPage }) {
       height: photo.height || 0,
       thumbnail: photo.urls?.small || photo.urls?.thumb || "",
       directUrl: photo.urls?.full || photo.urls?.regular || "",
+      downloadLocation: photo.links?.download_location || "",
       actionLabel: "Open photo",
       attribution: photo.user?.name ? `Photo by ${photo.user.name} on Unsplash` : "Photo from Unsplash",
     }));
@@ -576,8 +752,8 @@ function buildTimelineSearchTerms(text, orientation = "any", topic = "") {
   ].map(normalizeWhitespace).filter(Boolean).slice(0, 3);
 }
 
-async function searchTimelineItem(item, orientation, perTimestamp, topic = "") {
-  const terms = buildTimelineSearchTerms(item.text, orientation, topic);
+async function searchTimelineItem(item, orientation, perTimestamp, topic = "", guide = "") {
+  const terms = buildTimelineSearchTerms(`${guide} ${item.text}`, orientation, topic);
   const primaryQuery = terms[0] || item.text;
   const [pexels, pixabay, youtube, unsplash] = await Promise.all([
     searchPexels({ query: primaryQuery, orientation, perPage: perTimestamp }),
@@ -586,7 +762,7 @@ async function searchTimelineItem(item, orientation, perTimestamp, topic = "") {
     searchUnsplash({ query: primaryQuery, orientation, perPage: perTimestamp }),
   ]);
 
-  const visual = inferMediaIntent(`${topic} ${item.text}`);
+  const visual = inferMediaIntent(`${topic} ${guide} ${item.text}`);
   return {
     timestamp: item.timestamp,
     scriptLine: item.text,
@@ -603,6 +779,7 @@ app.post("/api/timeline-search", async (req, res) => {
   const orientation = String(req.body?.orientation || "any");
   const perTimestamp = Math.max(1, Math.min(Number(req.body?.perTimestamp || 3), 5));
   const topic = String(req.body?.topic || "").trim();
+  const guide = String(req.body?.guide || "").trim();
 
   if (!script) return res.status(400).json({ error: "Paste a timestamped script first." });
 
@@ -612,7 +789,7 @@ app.post("/api/timeline-search", async (req, res) => {
   try {
     const timeline = [];
     for (const item of items) {
-      timeline.push(await searchTimelineItem(item, orientation, perTimestamp, topic));
+      timeline.push(await searchTimelineItem(item, orientation, perTimestamp, topic, guide));
     }
     res.json({ count: timeline.length, orientation, timeline });
   } catch (error) {

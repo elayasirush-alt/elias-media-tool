@@ -67,3 +67,22 @@ This stops Pixabay or stock sites from treating "tundra" as nature/wildlife.
 Add this to `.env` to enable photo results:
 
 UNSPLASH_ACCESS_KEY=your_unsplash_access_key
+
+
+## New downloader features
+
+This version adds:
+- Password protection using `APP_USERNAME` and `APP_PASSWORD`.
+- Official download buttons for Pexels, Pixabay, and Unsplash results.
+- Unsplash download tracking via `download_location` when available.
+- A `Download media guide CSV` button for timestamped script results.
+- An Editing guide / visual instructions box to help keep results on topic.
+
+YouTube is still reference-only. Do not download or reuse YouTube videos unless you own the content or have permission.
+
+Canva is still handled as a helper/search workflow. Full Canva account integration requires Canva Connect API OAuth setup and is a separate integration step.
+
+
+## Ultimate workflow extras
+
+This version adds source checkboxes, local project history, a simple local admin dashboard, multi-select media downloads, Word/PDF/CSV guide export, thumbnail suggestions, CapCut editing notes, Canva search links per timestamp, and music/sound helper links.

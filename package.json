@@ -1,7 +1,7 @@
 {
   "name": "elias-media",
   "version": "1.0.0",
-  "description": "Elias Media dashboard with timestamped script media search, Canva helper, stock, archive and reference sources.",
+  "description": "Elias Media public dashboard with timestamp media search, official download buttons, guide export, and password protection.",
   "type": "module",
   "scripts": {
     "start": "node server.js",

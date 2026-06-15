@@ -18,7 +18,8 @@
         </div>
         <div class="top-actions">
           <span class="safe-badge">License-aware</span>
-          <span class="safe-badge dim">Local MVP</span>
+          <span class="safe-badge dim">Public app</span>
+          <a class="safe-badge logout-link" href="/logout">Logout</a>
         </div>
       </nav>
 
@@ -69,6 +70,19 @@
             <input id="query" type="text" placeholder="abandoned town sunset, busy city night, old bridge aerial" required />
           </label>
           <label>
+            Niche
+            <select id="searchNiche">
+              <option value="general">General</option>
+              <option value="automotive">Cars / Trucks</option>
+              <option value="aviation">Aviation</option>
+              <option value="documentary">Documentary / News</option>
+              <option value="motivation">Motivational</option>
+              <option value="business">Business / Finance</option>
+              <option value="music">Music / Performance</option>
+              <option value="architecture">Architecture / Real estate</option>
+            </select>
+          </label>
+          <label>
             Format
             <select id="orientation">
               <option value="any">Any</option>
@@ -87,6 +101,13 @@
             </select>
           </label>
           <button class="primary-btn" type="submit">Search radar</button>
+                  <div class="source-toggle-row">
+            <strong>Sources</strong>
+            <label><input type="checkbox" class="src-filter" value="pexels" checked /> Pexels</label>
+            <label><input type="checkbox" class="src-filter" value="pixabay" checked /> Pixabay</label>
+            <label><input type="checkbox" class="src-filter" value="youtube" checked /> YouTube</label>
+            <label><input type="checkbox" class="src-filter" value="unsplash" checked /> Unsplash</label>
+          </div>
         </form>
         <div class="examples" aria-label="Example searches">
           <button type="button" data-query="abandoned town sunset">abandoned town sunset</button>
@@ -108,6 +129,23 @@
           <label class="script-label">
             Main topic / niche
             <input id="topicInput" type="text" placeholder="Example: Toyota Tundra truck recall, cars, pickup trucks, automotive" />
+          </label>
+          <label class="script-label">
+            Quick niche mode
+            <select id="timelineNiche">
+              <option value="general">General</option>
+              <option value="automotive">Cars / Trucks</option>
+              <option value="aviation">Aviation</option>
+              <option value="documentary">Documentary / News</option>
+              <option value="motivation">Motivational</option>
+              <option value="business">Business / Finance</option>
+              <option value="music">Music / Performance</option>
+              <option value="architecture">Architecture / Real estate</option>
+            </select>
+          </label>
+          <label class="script-label">
+            Editing guide / visual instructions
+            <textarea id="guideInput" rows="4" placeholder="Example: Use realistic car footage, mechanic close-ups, dealership shots, clean documentary style, no animals, no cartoons."></textarea>
           </label>
           <label class="script-label">
             Timestamped script
@@ -133,6 +171,13 @@
             </label>
             <button class="primary-btn" type="submit">Analyze script</button>
           </div>
+          <div class="source-toggle-row">
+            <strong>Timestamp sources</strong>
+            <label><input type="checkbox" class="timeline-src-filter" value="pexels" checked /> Pexels</label>
+            <label><input type="checkbox" class="timeline-src-filter" value="pixabay" checked /> Pixabay</label>
+            <label><input type="checkbox" class="timeline-src-filter" value="youtube" checked /> YouTube</label>
+            <label><input type="checkbox" class="timeline-src-filter" value="unsplash" checked /> Unsplash</label>
+          </div>
         </form>
         <div class="examples" aria-label="Script examples">
           <button type="button" id="loadScriptExample">Load example script</button>
@@ -144,7 +189,13 @@
           <div>
             <p class="section-kicker">Scene by scene</p>
             <h2>Timestamp media plan</h2>
-            <p>Each timestamp gets 3 search terms plus clips from Pexels, Pixabay, YouTube references, and photos from Unsplash.</p>
+            <p>Each timestamp gets 3 search terms, download buttons for Pexels/Pixabay/Unsplash media, YouTube references, and a downloadable media guide.</p>
+            <div class="action-row-wrap">
+              <button id="downloadGuideBtn" class="secondary-btn hidden" type="button">Download media guide CSV</button>
+              <button id="downloadWordBtn" class="secondary-btn hidden" type="button">Download Word guide</button>
+              <button id="downloadPdfBtn" class="secondary-btn hidden" type="button">Print / Save PDF</button>
+              <button id="downloadSelectedBtn" class="secondary-btn hidden" type="button">Download selected media</button>
+            </div>
           </div>
         </div>
         <div id="timelineResults"></div>
@@ -192,6 +243,40 @@
           </div>
         </div>
         <div id="sourceLinks" class="source-links"></div>
+      </section>
+
+
+      <section id="assistantSection" class="results-section hidden">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Editing help</p>
+            <h2>Thumbnail and edit assistant</h2>
+            <p>Quick thumbnail ideas, Canva helpers, music/sound links, and CapCut editing notes.</p>
+          </div>
+        </div>
+        <div id="assistantContent"></div>
+      </section>
+
+      <section id="historySection" class="results-section">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Saved locally</p>
+            <h2>Recent project history</h2>
+            <p>Your last script searches are saved in this browser so you can reopen them quickly.</p>
+          </div>
+        </div>
+        <div id="historyContent" class="history-grid"></div>
+      </section>
+
+      <section id="adminSection" class="results-section">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Dashboard</p>
+            <h2>Admin snapshot</h2>
+            <p>Simple local stats for searches, timeline runs, and downloads from this browser.</p>
+          </div>
+        </div>
+        <div id="adminContent" class="admin-grid"></div>
       </section>
 
       <footer class="footer">
