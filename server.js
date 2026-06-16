@@ -271,9 +271,10 @@ function parseTimestampedScript(script = "", audioDuration = 0, topic = "", nich
 }
 
 function dimensions(format) {
-  if (format === "portrait") return { width: 1080, height: 1920 };
-  if (format === "square") return { width: 1080, height: 1080 };
-  return { width: 1920, height: 1080 };
+  // Render-safe draft resolution. This avoids 502 crashes on free/small instances.
+  if (format === "portrait") return { width: 720, height: 1280 };
+  if (format === "square") return { width: 900, height: 900 };
+  return { width: 1280, height: 720 };
 }
 
 function parseDuration(stderr = "") {
@@ -517,6 +518,49 @@ async function searchGiphy(query, count = 6) {
   }
 }
 
+
+function sourceFallbackResult(source, query) {
+  const q = encodeURIComponent(query);
+  const links = {
+    "YouTube": `https://www.youtube.com/results?search_query=${q}`,
+    "Pixabay": `https://pixabay.com/videos/search/${q}/`,
+    "Pexels": `https://www.pexels.com/search/videos/${q}/`,
+    "Unsplash": `https://unsplash.com/s/photos/${q}`,
+    "Flickr": `https://www.flickr.com/search/?text=${q}`,
+    "GIPHY": `https://giphy.com/search/${q}`,
+    "Openverse": `https://openverse.org/search/?q=${q}`,
+    "NASA": `https://images.nasa.gov/search-results?q=${q}`,
+    "Wikimedia": `https://commons.wikimedia.org/w/index.php?search=${q}`,
+    "Internet Archive": `https://archive.org/search?query=${q}`,
+  };
+  return result(source, "search", `Open ${source} search for "${query}"`, "", links[source] || "", "", "Open source website. API key may be missing or no direct API results were found.");
+}
+
+function ensureSourceVisibility(groups, query, allowedSources = []) {
+  const mapping = {
+    pexels: "Pexels",
+    pixabay: "Pixabay",
+    youtube: "YouTube",
+    unsplash: "Unsplash",
+    openverse: "Openverse",
+    nasa: "NASA",
+    wikimedia: "Wikimedia",
+    archive: "Internet Archive",
+    flickr: "Flickr",
+    giphy: "GIPHY",
+  };
+  const order = allowedSources?.length ? allowedSources : Object.keys(mapping);
+  for (const id of order) {
+    const name = mapping[id];
+    if (!name) continue;
+    if (!groups[name] || !groups[name].length) {
+      groups[name] = [sourceFallbackResult(name, query)];
+    }
+  }
+  return groups;
+}
+
+
 async function searchAllSources(query, count = 6, allowedSources = []) {
   const allow = new Set(allowedSources?.length ? allowedSources : ["pexels", "pixabay", "youtube", "unsplash", "openverse", "nasa", "wikimedia", "archive", "flickr", "giphy"]);
   const tasks = [];
@@ -546,7 +590,9 @@ async function searchAllSources(query, count = 6, allowedSources = []) {
     groups[item.source] ||= [];
     groups[item.source].push(item);
   }
-  return { results: filtered, groups };
+  const visibleGroups = ensureSourceVisibility(groups, query, [...allow]);
+  const visibleResults = Object.values(visibleGroups).flat();
+  return { results: visibleResults, groups: visibleGroups };
 }
 
 const usedMediaUrls = new Set();
@@ -594,7 +640,7 @@ function makePartArgs(inputPath, duration, dims, text, photoMotion, outPath) {
 
 
 function combineScenesForRender(scenes = [], audioDuration = 0) {
-  const targetSeconds = Number(process.env.RENDER_TARGET_SCENE_SECONDS || 10);
+  const targetSeconds = Number(process.env.RENDER_TARGET_SCENE_SECONDS || 12);
   const maxScenes = Number(process.env.MAX_RENDER_SCENES || 45);
   const combined = [];
   let current = null;
@@ -650,12 +696,14 @@ function combineScenesForRender(scenes = [], audioDuration = 0) {
 
 
 
-function chooseScenesForRender(originalScenes = [], audioDuration = 0, renderMode = "exact") {
-  const hardLimit = Number(process.env.MAX_RENDER_SCENES || 500);
-  if (renderMode === "exact") {
+function chooseScenesForRender(originalScenes = [], audioDuration = 0, renderMode = "fast") {
+  const hardLimit = Number(process.env.MAX_RENDER_SCENES || 35);
+  const allowHeavy = String(process.env.ALLOW_HEAVY_RENDER || "false") === "true";
+  if (renderMode === "exact" && allowHeavy) {
     return originalScenes.slice(0, hardLimit).map((scene, index) => ({ ...scene, scene: index + 1 }));
   }
-  return combineScenesForRender(originalScenes, audioDuration);
+  // On Render Free/small instances, always merge long scripts unless ALLOW_HEAVY_RENDER=true.
+  return combineScenesForRender(originalScenes, audioDuration).slice(0, hardLimit).map((scene, index) => ({ ...scene, scene: index + 1 }));
 }
 
 
@@ -746,7 +794,7 @@ function createAutoSfxBed(duration, scenes = [], mood, outPath) {
   const total = Math.max(1, Math.ceil(duration * sampleRate));
   const samples = new Float32Array(total);
 
-  const maxCues = Number(process.env.MAX_SFX_CUES || 80);
+  const maxCues = Number(process.env.MAX_SFX_CUES || 25);
   let cues = 0;
   const step = Math.max(1, Math.ceil(scenes.length / Math.max(1, maxCues)));
 
@@ -930,7 +978,8 @@ app.post("/api/search-media", async (req, res) => {
     const cleanQuery = safeText(query);
     if (!cleanQuery) return res.status(400).json({ error: "Enter something to search." });
     const finalQuery = `${cleanQuery} ${nicheWords(niche)}`.trim();
-    const data = await searchAllSources(finalQuery, Number(count) || 6, sources);
+    const requestedCount = Math.max(1, Math.min(Number(count) || 6, 30));
+    const data = await searchAllSources(finalQuery, requestedCount, sources);
     res.json({ query: cleanQuery, ...data });
   } catch (error) {
     res.status(500).json({ error: error.message || "Media search failed." });
@@ -939,16 +988,25 @@ app.post("/api/search-media", async (req, res) => {
 
 app.post("/api/suggest-media", async (req, res) => {
   try {
-    const { script = "", topic = "", niche = "documentary", maxScenes = 25, sources = [] } = req.body || {};
-    const scenes = parseTimestampedScript(script, 0, topic, niche).slice(0, Math.min(Number(maxScenes) || 25, 40));
+    const { script = "", topic = "", niche = "documentary", maxScenes = 25, sources = [], mediaPerTimestamp = 3 } = req.body || {};
+    const scenes = parseTimestampedScript(script, 0, topic, niche).slice(0, Math.min(Number(maxScenes) || 25, 80));
+    const perTimestamp = Math.max(1, Math.min(Number(mediaPerTimestamp) || 3, 12));
     if (!scenes.length) return res.status(400).json({ error: "No valid timestamps found." });
 
     const output = [];
     for (const scene of scenes) {
-      const data = await searchAllSources(scene.query, 3, sources);
+      const data = await searchAllSources(scene.query, perTimestamp, sources);
+      const uniqueMedia = [];
+      const seenMedia = new Set();
+      for (const item of data.results) {
+        const key = item.downloadUrl || item.url || item.thumbnail || item.title;
+        if (!key || seenMedia.has(key)) continue;
+        seenMedia.add(key);
+        uniqueMedia.push(item);
+      }
       output.push({
         ...scene,
-        media: data.results.slice(0, 12),
+        media: uniqueMedia.slice(0, perTimestamp * Math.max(1, sources?.length || 10)),
         groups: data.groups,
       });
     }
@@ -976,7 +1034,7 @@ app.post(
       const script = String(req.body.script || "");
       const useMusic = String(req.body.useMusic || "false");
       const photoMotion = String(req.body.photoMotion || "slow-zoom");
-      const renderMode = String(req.body.renderMode || "exact");
+      const renderMode = String(req.body.renderMode || "fast");
       const audioMode = String(req.body.audioMode || "auto");
       const sfxMode = String(req.body.sfxMode || "auto");
       const musicMood = String(req.body.musicMood || "documentary");
@@ -1023,7 +1081,7 @@ app.post(
       const script = String(req.body.script || "");
       const useMusic = String(req.body.useMusic || "false");
       const photoMotion = String(req.body.photoMotion || "slow-zoom");
-      const renderMode = String(req.body.renderMode || "exact");
+      const renderMode = String(req.body.renderMode || "fast");
       const audioMode = String(req.body.audioMode || "auto");
       const sfxMode = String(req.body.sfxMode || "auto");
       const musicMood = String(req.body.musicMood || "documentary");

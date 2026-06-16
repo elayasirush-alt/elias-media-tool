@@ -35,7 +35,7 @@ async function readApiResponse(response) {
     }
   }
   if (!response.ok) {
-    throw new Error(data.error || `Server error ${response.status}. This usually means the render was too heavy or the service restarted.`);
+    throw new Error(data.error || `Server error ${response.status}. On Render Free this usually means the render was too heavy. Use Render-safe mode, shorter audio, or a stronger/local renderer.`);
   }
   return data;
 }
@@ -161,7 +161,7 @@ form.addEventListener("submit", async (event) => {
   formData.append("format", document.getElementById("format").value);
   formData.append("photoMotion", document.getElementById("photoMotion").value);
   formData.append("useMusic", document.getElementById("useMusic").checked ? "true" : "false");
-  formData.append("renderMode", document.getElementById("renderMode")?.value || "exact");
+  formData.append("renderMode", document.getElementById("renderMode")?.value || "fast");
   formData.append("audioMode", document.getElementById("audioMode")?.value || "auto");
   formData.append("sfxMode", document.getElementById("sfxMode")?.value || "auto");
   formData.append("musicMood", document.getElementById("musicMood")?.value || "documentary");
@@ -242,6 +242,7 @@ function renderMediaCards(items) {
         <div class="result-links">
           ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Open</a>` : ""}
           ${item.downloadUrl ? `<a href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noopener">Media file</a>` : ""}
+          ${item.downloadUrl ? `<a href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noopener" download>Download</a>` : (item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Source search</a>` : "")}
         </div>
       </div>
     </article>
@@ -276,7 +277,7 @@ mediaSearchBtn.addEventListener("click", async () => {
         query,
         niche: document.getElementById("mediaNiche").value,
         sources: selectedSources(),
-        count: 6,
+        count: Number(document.getElementById("mediaCount")?.value || 6),
       }),
     });
     const data = await readApiResponse(response);
@@ -342,13 +343,14 @@ suggestMediaBtn.addEventListener("click", async () => {
         script,
         topic: document.getElementById("suggestTopic").value.trim(),
         niche: document.getElementById("suggestNiche").value,
-        maxScenes: 25,
+        maxScenes: Number(document.getElementById("maxSuggestScenes")?.value || 25),
+        mediaPerTimestamp: Number(document.getElementById("mediaPerTimestamp")?.value || 3),
         sources: selectedSources(),
       }),
     });
     const data = await readApiResponse(response);
     suggestResults.innerHTML = `<h2>Timestamp media examples</h2>
-      <p class="muted">Showing media examples for ${data.scenes.length} scenes. For long videos, start with these first and search more scene-by-scene if needed.</p>
+      <p class="muted">Showing media examples for ${data.scenes.length} timestamp scenes. Results are de-duplicated per timestamp.</p>
       ${data.scenes.map((scene) => `
         <article class="scene-item">
           <div class="scene-num">${escapeHtml(scene.timestamp)} — ${escapeHtml(scene.visualPlan)}</div>

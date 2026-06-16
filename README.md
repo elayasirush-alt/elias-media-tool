@@ -90,3 +90,35 @@ Why generated audio instead of Pexels/Pixabay auto-download?
 - Pexels API provides photos and videos, not a music/SFX API.
 - Pixabay has music and sound effects on its website, but the official API documentation is primarily for images and videos.
 - Generated audio is more reliable for automatic rendering and avoids fragile scraping.
+
+
+## Render Safe Lite
+
+This version is safer for Render Free/small instances:
+- Default output is 1280x720 instead of 1920x1080.
+- Default render mode merges many timestamp lines into about 35 render scenes.
+- Auto SFX is limited to about 25 cues.
+- High detail is disabled unless ALLOW_HEAVY_RENDER=true.
+- Use MAX_RENDER_SCENES=35 and RENDER_TARGET_SCENE_SECONDS=12 on Render Free.
+
+For true 500 separate rendered scenes, use a paid server or local desktop renderer.
+
+
+## Download buttons and source visibility
+
+This version restores media download buttons:
+- Open
+- Media file
+- Download
+
+It also adds:
+- Results per source control for Search media.
+- Media per timestamp control for Timestamp suggestions.
+- Timestamps to process control.
+- De-duplication per timestamp.
+- Every selected source appears. If an API key is missing or a source returns no direct results, the tool shows a source-search fallback link.
+
+Reminder:
+- YouTube is reference only, not downloadable.
+- Pixabay requires PIXABAY_API_KEY for direct Pixabay API results.
+- Flickr and GIPHY require their own API keys.

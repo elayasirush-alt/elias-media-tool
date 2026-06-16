@@ -40,7 +40,7 @@
 
     <section id="build" class="tab-panel active">
       <section class="notice">
-        <strong>Best format:</strong> Paste each line like <code>00:00 Your sentence here</code> or <code>(0:00) Your sentence here</code>. For up to 500 scenes, choose High detail render mode and keep the page open while it renders.
+        <strong>Best format:</strong> Paste each line like <code>00:00 Your sentence here</code> or <code>(0:00) Your sentence here</code>. For Render Free, use Render-safe mode. For 500 true scenes, use a stronger server or local renderer.
       </section>
 
       <section class="builder-card">
@@ -98,10 +98,10 @@
             <label>
               Render mode
               <select id="renderMode" name="renderMode">
-                <option value="exact">High detail: render every timestamp line, up to 500</option>
-                <option value="fast">Fast: merge short lines for Render Free</option>
+                <option value="fast" selected>Render-safe: merge lines for Render Free</option>
+                <option value="exact">High detail: only for stronger server</option>
               </select>
-              <small>Use high detail for many scenes. Keep the page open while rendering.</small>
+              <small>Use Render-safe mode on free Render. High detail is only for a stronger server.</small>
             </label>
 
             <label>
@@ -180,12 +180,23 @@
     <section id="search" class="tab-panel">
       <section class="builder-card">
         <h2>Search media from different sites</h2>
-        <p class="muted">Search anything and get results from the media sources we added. Canva and search-term generation are removed.</p>
+        <p class="muted">Search anything and get results from every selected source. Each result has Open, Media file, and Download where available. Canva and search-term generation are removed.</p>
         <div class="grid">
           <label>
             Search
             <input id="mediaQuery" type="text" placeholder="Example: pickup trucks sitting on dealership lot" />
           </label>
+          <label>
+            Results per source
+            <select id="mediaCount">
+              <option value="3">3 each</option>
+              <option value="6" selected>6 each</option>
+              <option value="10">10 each</option>
+              <option value="15">15 each</option>
+              <option value="20">20 each</option>
+            </select>
+          </label>
+
           <label>
             Niche
             <select id="mediaNiche">
@@ -200,6 +211,7 @@
           </label>
         </div>
         <div class="source-grid" id="sourceGrid"></div>
+        <small>Every selected source will appear. If an API key is missing or there are no direct results, the tool shows an external source-search link.</small>
         <button id="mediaSearchBtn" type="button">Search all selected sources</button>
       </section>
       <section id="mediaResults" class="builder-card hidden"></section>
@@ -214,6 +226,27 @@
             Topic / video direction
             <input id="suggestTopic" type="text" placeholder="Example: slow-selling trucks in 2026" />
           </label>
+          <label>
+            Media per timestamp
+            <select id="mediaPerTimestamp">
+              <option value="2">2 per source</option>
+              <option value="3" selected>3 per source</option>
+              <option value="5">5 per source</option>
+              <option value="8">8 per source</option>
+              <option value="12">12 per source</option>
+            </select>
+          </label>
+
+          <label>
+            Timestamps to process
+            <select id="maxSuggestScenes">
+              <option value="10">First 10 timestamps</option>
+              <option value="25" selected>First 25 timestamps</option>
+              <option value="50">First 50 timestamps</option>
+              <option value="80">First 80 timestamps</option>
+            </select>
+          </label>
+
           <label>
             Niche
             <select id="suggestNiche">
