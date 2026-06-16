@@ -1066,11 +1066,17 @@ app.get("/api/search", async (req, res) => {
   const perPage = Math.max(1, Math.min(Number(req.query.per_page || 8), 20));
   if (!query) return res.status(400).json({ error: "Missing search query." });
 
-  const [pexels, pixabay, youtube, unsplash] = await Promise.all([
+  const [pexels, pixabay, youtube, unsplash, openverse, nasa, commons, archive, flickr, giphy] = await Promise.all([
     searchPexels({ query, orientation, perPage }),
     searchPixabay({ query, orientation, perPage }),
     searchYouTube({ query, perPage }),
     searchUnsplash({ query, orientation, perPage }),
+    searchOpenverse({ query, perPage }),
+    searchNasaLibrary({ query, perPage }),
+    searchWikimedia({ query, perPage }),
+    searchInternetArchive({ query, perPage }),
+    searchFlickr({ query, perPage }),
+    searchGiphy({ query, perPage }),
   ]);
 
   res.json({
@@ -1079,7 +1085,18 @@ app.get("/api/search", async (req, res) => {
     sourceLinks: createSourceLinks(query),
     canvaSuggestions: createCanvaSearchSuggestions(query),
     canvaToolkit: createCanvaToolkit(query, orientation),
-    apiResults: { pexels, pixabay, youtube, unsplash },
+    apiResults: {
+      pexels: withUniqueResults(pexels, perPage),
+      pixabay: withUniqueResults(pixabay, perPage),
+      youtube: withUniqueResults(youtube, perPage),
+      unsplash: withUniqueResults(unsplash, perPage),
+      openverse: withUniqueResults(openverse, perPage),
+      nasa: withUniqueResults(nasa, perPage),
+      commons: withUniqueResults(commons, perPage),
+      archive: withUniqueResults(archive, perPage),
+      flickr: withUniqueResults(flickr, perPage),
+      giphy: withUniqueResults(giphy, perPage),
+    },
   });
 });
 

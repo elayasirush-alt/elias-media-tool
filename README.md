@@ -91,3 +91,6 @@ This version adds source checkboxes, local project history, a simple local admin
 ## Complete 10-source version
 
 This version reduces repeated media results and adds up to 10 direct result sources: Pexels, Pixabay, YouTube references, Unsplash, Openverse, NASA Image and Video Library, Wikimedia Commons, Internet Archive, Flickr, and GIPHY. Flickr and GIPHY require optional API keys. YouTube remains reference-only. Always check each source license before publishing.
+
+
+Fix note: both Start a search and Timestamped script mode now return all 10 source panels.
