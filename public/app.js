@@ -2,44 +2,49 @@
 const SOURCES = [
   ["pexels", "Pexels"],
   ["pixabay", "Pixabay"],
-  ["youtube", "YouTube ref"],
   ["unsplash", "Unsplash"],
+  ["youtube", "YouTube"],
+  ["canva", "Canva"],
   ["openverse", "Openverse"],
   ["nasa", "NASA"],
   ["wikimedia", "Wikimedia"],
-  ["archive", "Archive"],
+  ["archive", "Internet Archive"],
   ["flickr", "Flickr"],
   ["giphy", "GIPHY"],
 ];
 
-const tabs = document.querySelectorAll(".tab");
-const panels = document.querySelectorAll(".tab-panel");
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    tabs.forEach((t) => t.classList.remove("active"));
-    panels.forEach((p) => p.classList.remove("active"));
-    tab.classList.add("active");
-    document.getElementById(tab.dataset.tab).classList.add("active");
-  });
-});
+const NICHES = [
+  ["general", "General"],
+  ["documentary", "Documentary / News"],
+  ["automotive", "Cars / Trucks"],
+  ["aviation", "Aviation"],
+  ["business", "Business / Corporate"],
+  ["technology", "Technology / AI"],
+  ["finance", "Finance / Economy"],
+  ["realestate", "Real Estate"],
+  ["architecture", "Architecture / Design"],
+  ["construction", "Construction"],
+  ["education", "Education"],
+  ["healthcare", "Healthcare / Medical"],
+  ["travel", "Travel"],
+  ["food", "Food / Restaurant"],
+  ["sports", "Sports / Fitness"],
+  ["lifestyle", "Lifestyle"],
+  ["motivation", "Motivation"],
+  ["music", "Music / Performance"],
+  ["worship", "Worship / Spiritual"],
+  ["nature", "Nature / Wildlife"],
+  ["politics", "Politics / Government"],
+  ["crime", "Crime / Investigation"],
+  ["history", "History / Archive"],
+  ["science", "Science / Research"],
+  ["fashion", "Fashion"],
+  ["beauty", "Beauty"],
+  ["gaming", "Gaming"],
+  ["environment", "Environment / Climate"],
+];
 
-
-async function readApiResponse(response) {
-  const text = await response.text();
-  let data = {};
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch (error) {
-      data = { error: text.slice(0, 500) };
-    }
-  }
-  if (!response.ok) {
-    throw new Error(data.error || `Server error ${response.status}. On Render Free this usually means the render was too heavy. Use Render-safe mode, shorter audio, or a stronger/local renderer.`);
-  }
-  return data;
-}
-
+let latestSuggestionReport = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -47,322 +52,331 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
 
-function selectedSources() {
-  return [...document.querySelectorAll(".source-check:checked")].map((input) => input.value);
-}
-
-function renderSourceChecks() {
-  const grid = document.getElementById("sourceGrid");
-  grid.innerHTML = SOURCES.map(([id, label]) => `
-    <label class="source-card">
-      <input class="source-check" type="checkbox" value="${id}" checked />
-      ${label}
-    </label>
-  `).join("");
-}
-
-renderSourceChecks();
-
-// Build video mode
-const form = document.getElementById("builderForm");
-const previewBtn = document.getElementById("previewBtn");
-const buildBtn = document.getElementById("buildBtn");
-const progressCard = document.getElementById("progressCard");
-const progressText = document.getElementById("progressText");
-const progressBar = document.getElementById("progressBar");
-const resultCard = document.getElementById("resultCard");
-const resultMeta = document.getElementById("resultMeta");
-const downloadVideo = document.getElementById("downloadVideo");
-const downloadReport = document.getElementById("downloadReport");
-const scenePlanCard = document.getElementById("scenePlanCard");
-const sceneSummary = document.getElementById("sceneSummary");
-const sceneList = document.getElementById("sceneList");
-let progressTimer;
-
-function setProgress(percent, text) {
-  progressCard.classList.remove("hidden");
-  progressBar.style.width = `${percent}%`;
-  progressText.textContent = text;
-}
-
-function fakeProgress() {
-  let p = 8;
-  clearInterval(progressTimer);
-  progressTimer = setInterval(() => {
-    p = Math.min(p + Math.random() * 5, 88);
-    setProgress(p, "Building video... selecting clips, timing scenes, designing music/SFX, and rendering MP4.");
-  }, 2500);
-}
-
-function renderScenePlan(data, targetList = sceneList, targetSummary = sceneSummary, targetCard = scenePlanCard) {
-  targetCard.classList.remove("hidden");
-  const flags = data.riskFlags || [];
-  targetSummary.innerHTML = `Scenes found: <strong>${data.scenes.length}</strong>. Risk flags: <span class="${flags.length ? "risk" : "ok"}">${escapeHtml(flags.join(", ") || "None")}</span>.`;
-  targetList.innerHTML = data.scenes.map((scene) => `
-    <article class="scene-item">
-      <div class="scene-num">${escapeHtml(scene.timestamp)} — Scene ${scene.scene}</div>
-      <p><strong>Script:</strong> ${escapeHtml(scene.text)}</p>
-      <p><strong>Suggested media:</strong> ${escapeHtml(scene.visualPlan)}</p>
-      <p><strong>Text on screen:</strong> ${escapeHtml(scene.callout || "No text")}</p>
-      <p><strong>Duration:</strong> ${Math.round(scene.duration)}s</p>
-      <p><strong>Check:</strong> <span class="${(scene.riskFlags || []).length ? "risk" : "ok"}">${escapeHtml((scene.riskFlags || []).join(", ") || "No risk flag")}</span></p>
-    </article>
-  `).join("");
-}
-
-async function previewPlan() {
-  const script = document.getElementById("script").value.trim();
-  if (!script) return alert("Paste your timestamped script first.");
-
-  previewBtn.disabled = true;
-  previewBtn.textContent = "Reading script...";
-  try {
-    const response = await fetch("/api/parse-script", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        script,
-        topic: document.getElementById("topic").value.trim(),
-        niche: document.getElementById("niche").value,
-        audioDuration: 0,
-      }),
-    });
-    const data = await readApiResponse(response);
-    renderScenePlan(data);
-    scenePlanCard.scrollIntoView({ behavior: "smooth" });
-  } catch (error) {
-    alert(error.message || "Could not read script.");
-  } finally {
-    previewBtn.disabled = false;
-    previewBtn.textContent = "1. Preview scene plan";
+async function readApi(response) {
+  const text = await response.text();
+  let data = {};
+  if (text) {
+    try { data = JSON.parse(text); }
+    catch { data = { error: text.slice(0, 500) }; }
   }
-}
-
-previewBtn.addEventListener("click", previewPlan);
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  resultCard.classList.add("hidden");
-
-  const voiceover = document.getElementById("voiceover").files[0];
-  if (!voiceover) return alert("Upload your voiceover first.");
-  const script = document.getElementById("script").value.trim();
-  if (!script) return alert("Paste your timestamped script first.");
-
-  const formData = new FormData();
-  formData.append("voiceover", voiceover);
-
-  const music = document.getElementById("music").files[0];
-  if (music) formData.append("music", music);
-
-  formData.append("script", script);
-  formData.append("topic", document.getElementById("topic").value.trim());
-  formData.append("niche", document.getElementById("niche").value);
-  formData.append("format", document.getElementById("format").value);
-  formData.append("photoMotion", document.getElementById("photoMotion").value);
-  formData.append("useMusic", document.getElementById("useMusic").checked ? "true" : "false");
-  formData.append("renderMode", document.getElementById("renderMode")?.value || "fast");
-  formData.append("audioMode", document.getElementById("audioMode")?.value || "auto");
-  formData.append("sfxMode", document.getElementById("sfxMode")?.value || "auto");
-  formData.append("musicMood", document.getElementById("musicMood")?.value || "documentary");
-
-  buildBtn.disabled = true;
-  buildBtn.textContent = "Building...";
-  setProgress(5, "Uploading audio and script...");
-  fakeProgress();
-
-  try {
-        const startResponse = await fetch("/api/start-build-video", { method: "POST", body: formData });
-    const startData = await readApiResponse(startResponse);
-    clearInterval(progressTimer);
-    await pollRenderJob(startData.jobId);
-  } catch (error) {
-    clearInterval(progressTimer);
-    setProgress(100, error.message || "Something went wrong.");
-  } finally {
-    buildBtn.disabled = false;
-    buildBtn.textContent = "2. Build video draft";
-  }
-});
-
-
-async function pollRenderJob(jobId) {
-  setProgress(3, "Render job started. Keep this page open.");
-  return new Promise((resolve, reject) => {
-    const timer = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/job/${jobId}`);
-        const job = await readApiResponse(response);
-        setProgress(job.progress || 1, job.message || "Rendering...");
-        if (job.total) {
-          progressText.textContent = `${job.message || "Rendering..."} (${job.current || 0}/${job.total} scenes)`;
-        }
-
-        if (job.status === "complete") {
-          clearInterval(timer);
-          const data = job.result || {};
-          setProgress(100, "Video ready.");
-          const flags = data.riskFlags || [];
-          resultMeta.innerHTML = `Duration: <strong>${data.duration || ""}s</strong>. Render scenes used: <strong>${data.scenes || job.total}</strong> from <strong>${data.originalScenes || job.total}</strong> timestamp lines. Risk flags: <span class="${flags.length ? "risk" : "ok"}">${escapeHtml(flags.join(", ") || "None")}</span>.`;
-          downloadVideo.href = job.outputUrl || data.outputUrl;
-          downloadReport.href = job.reportUrl || data.reportUrl;
-          resultCard.classList.remove("hidden");
-          resultCard.scrollIntoView({ behavior: "smooth" });
-          resolve(job);
-        }
-
-        if (job.status === "failed") {
-          clearInterval(timer);
-          setProgress(100, job.error || "Render failed.");
-          reject(new Error(job.error || "Render failed."));
-        }
-      } catch (error) {
-        clearInterval(timer);
-        setProgress(100, error.message || "Could not read render status.");
-        reject(error);
-      }
-    }, 3000);
-  });
-}
-
-
-// Media search mode
-const mediaSearchBtn = document.getElementById("mediaSearchBtn");
-const mediaResults = document.getElementById("mediaResults");
-
-function renderMediaCards(items) {
-  if (!items?.length) return `<p class="muted">No results found from selected sources. Check API keys or try a different query.</p>`;
-  return `<div class="results-grid">${items.map((item) => `
-    <article class="result-card">
-      ${item.thumbnail ? `<img src="${escapeHtml(item.thumbnail)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ""}
-      <div class="result-body">
-        <div class="result-source">${escapeHtml(item.source)} · ${escapeHtml(item.type)}</div>
-        <div class="result-title">${escapeHtml(item.title)}</div>
-        <div class="result-meta">${escapeHtml(item.meta || "")}</div>
-        <div class="result-links">
-          ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Open</a>` : ""}
-          ${item.downloadUrl ? `<a href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noopener">Media file</a>` : ""}
-          ${item.downloadUrl ? `<a href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noopener" download>Download</a>` : (item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Source search</a>` : "")}
-        </div>
-      </div>
-    </article>
-  `).join("")}</div>`;
-}
-
-function renderGroupedResults(data, container, title = "Media results") {
-  const groups = data.groups || {};
-  const names = Object.keys(groups);
-  container.classList.remove("hidden");
-  container.innerHTML = `<h2>${escapeHtml(title)}</h2>
-    <p class="muted">${data.results?.length || 0} results found.</p>
-    ${names.length ? names.map((name) => `
-      <h3 class="group-title">${escapeHtml(name)}</h3>
-      ${renderMediaCards(groups[name])}
-    `).join("") : renderMediaCards([])}
-  `;
-}
-
-mediaSearchBtn.addEventListener("click", async () => {
-  const query = document.getElementById("mediaQuery").value.trim();
-  if (!query) return alert("Enter something to search.");
-  mediaSearchBtn.disabled = true;
-  mediaSearchBtn.textContent = "Searching...";
-  mediaResults.classList.remove("hidden");
-  mediaResults.innerHTML = "<h2>Searching media...</h2><p class='muted'>Checking selected sources.</p>";
-  try {
-    const response = await fetch("/api/search-media", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        niche: document.getElementById("mediaNiche").value,
-        sources: selectedSources(),
-        count: Number(document.getElementById("mediaCount")?.value || 6),
-      }),
-    });
-    const data = await readApiResponse(response);
-    renderGroupedResults(data, mediaResults, "Media results");
-  } catch (error) {
-    mediaResults.innerHTML = `<h2>Search failed</h2><p class="risk">${escapeHtml(error.message)}</p>`;
-  } finally {
-    mediaSearchBtn.disabled = false;
-    mediaSearchBtn.textContent = "Search all selected sources";
-  }
-});
-
-// Timestamp suggestion mode
-const suggestPlanBtn = document.getElementById("suggestPlanBtn");
-const suggestMediaBtn = document.getElementById("suggestMediaBtn");
-const suggestResults = document.getElementById("suggestResults");
-
-async function parseSuggestScript() {
-  const script = document.getElementById("suggestScript").value.trim();
-  if (!script) throw new Error("Paste timestamped text first.");
-  const response = await fetch("/api/parse-script", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      script,
-      topic: document.getElementById("suggestTopic").value.trim(),
-      niche: document.getElementById("suggestNiche").value,
-      audioDuration: 0,
-    }),
-  });
-  const data = await readApiResponse(response);
+  if (!response.ok) throw new Error(data.error || `Server error ${response.status}`);
   return data;
 }
 
-suggestPlanBtn.addEventListener("click", async () => {
-  suggestPlanBtn.disabled = true;
-  suggestPlanBtn.textContent = "Reading...";
+function selectedSources() {
+  return [...document.querySelectorAll(".sourceOpt:checked")].map((x) => x.value);
+}
+
+function initControls() {
+  document.querySelectorAll("select[id$='niche'], select#niche, select#searchNiche").forEach((select) => {
+    select.innerHTML = NICHES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+  });
+  document.getElementById("searchNiche").value = "general";
+  document.getElementById("niche").value = "general";
+
+  const sourceBox = document.getElementById("sourceChecks");
+  sourceBox.innerHTML = SOURCES.map(([id, label]) => `
+    <label class="source-check"><input class="sourceOpt" type="checkbox" value="${id}" checked> ${label}</label>
+  `).join("");
+
+  document.querySelectorAll(".tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach((x) => x.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+  });
+}
+
+function renderKeyStatus(keys = {}) {
+  const labels = {
+    PEXELS_API_KEY: "Pexels",
+    PIXABAY_API_KEY: "Pixabay",
+    UNSPLASH_ACCESS_KEY: "Unsplash",
+    YOUTUBE_API_KEY: "YouTube",
+    FLICKR_API_KEY: "Flickr",
+    GIPHY_API_KEY: "GIPHY",
+  };
+  const rows = Object.entries(labels).map(([key, label]) => `
+    <div class="key-row"><strong>${label}</strong><span class="${keys[key] ? "good" : "bad"}">${keys[key] ? "Ready" : "Missing"}</span></div>
+  `).join("");
+  document.getElementById("keyStatus").innerHTML = rows;
+  const ready = Object.values(keys).filter(Boolean).length;
+  document.getElementById("keyPill").textContent = `${ready}/6 API keys ready`;
+}
+
+async function loadStatus() {
   try {
-    const data = await parseSuggestScript();
-    suggestResults.classList.remove("hidden");
-    suggestResults.innerHTML = `<h2>Timestamp suggestions</h2><p id="suggestSummary"></p><div id="suggestList"></div>`;
-    renderScenePlan(data, document.getElementById("suggestList"), document.getElementById("suggestSummary"), suggestResults);
+    const data = await readApi(await fetch("/api/status"));
+    renderKeyStatus(data.keys || {});
+  } catch (_) {}
+}
+
+function mediaCard(item) {
+  return `
+    <article class="media-card">
+      ${item.thumbnail ? `<img src="${escapeHtml(item.thumbnail)}" loading="lazy" onerror="this.style.display='none'">` : ""}
+      <div class="media-body">
+        <div class="media-source">${escapeHtml(item.source)} · ${escapeHtml(item.type)}</div>
+        <div class="media-title">${escapeHtml(item.title)}</div>
+        ${item.meta ? `<div class="muted">${escapeHtml(item.meta)}</div>` : ""}
+        ${item.license ? `<div class="tag">${escapeHtml(item.license)}</div>` : ""}
+        <div class="media-links">
+          ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Open</a>` : ""}
+          ${item.downloadUrl ? `<a href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noopener">Media file</a>` : ""}
+          ${item.downloadUrl ? `<a href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noopener" download>Download</a>` : ""}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderMediaGroups(data, container) {
+  const groups = data.groups || {};
+  container.innerHTML = Object.keys(groups).map((name) => `
+    <section class="media-group">
+      <h3>${escapeHtml(name)} <span class="tag">${groups[name].length} result(s)</span></h3>
+      <div class="media-grid">${groups[name].map(mediaCard).join("")}</div>
+    </section>
+  `).join("");
+}
+
+
+function renderMusicPlan(plan, backgroundMusicResults = []) {
+  if (!plan) return "";
+  return `
+    <section class="scene-card">
+      <div class="scene-head">
+        <strong>Background music plan</strong>
+        <p>${escapeHtml(plan.mainMood || "Serious documentary")}</p>
+      </div>
+      <div class="scene-body">
+        <div>
+          <b>How to use background music:</b>
+          <div class="tag-row">${(plan.use || []).map((x) => `<span class="tag">${escapeHtml(x)}</span>`).join("")}</div>
+        </div>
+        <div>
+          <b>Volume guide:</b>
+          <p class="muted">${escapeHtml(plan.volumeGuide || "Keep music under the voiceover.")}</p>
+        </div>
+        <div>
+          <b>Music structure:</b>
+          <div class="tag-row">${(plan.structure || []).map((x) => `<span class="tag">${escapeHtml(x)}</span>`).join("")}</div>
+        </div>
+        <div>
+          <b>Background music search terms:</b>
+          <div class="tag-row">${(plan.searchTerms || []).map((x) => `<span class="tag">${escapeHtml(x)}</span>`).join("")}</div>
+        </div>
+        <div>
+          <b>Background music sources to use:</b>
+          <div class="media-grid">${(backgroundMusicResults || []).map(mediaCard).join("")}</div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderScene(scene) {
+  const mediaHtml = scene.media ? Object.keys(scene.media.groups || {}).map((name) => `
+    <section class="media-group">
+      <h3>${escapeHtml(name)} <span class="tag">${scene.media.groups[name].length}</span></h3>
+      <div class="media-grid">${scene.media.groups[name].map(mediaCard).join("")}</div>
+    </section>
+  `).join("") : "";
+
+  return `
+    <article class="scene-card">
+      <div class="scene-head">
+        <strong>${escapeHtml(scene.timestamp)} — Scene ${scene.scene}</strong>
+        <p>${escapeHtml(scene.text)}</p>
+      </div>
+      <div class="scene-body">
+        <div class="tag-row">
+          <span class="tag"><b>Visual:</b> ${escapeHtml(scene.visualPlan)}</span>
+          <span class="tag"><b>SFX:</b> ${escapeHtml(scene.sfx)}</span>
+          <span class="tag"><b>Music cue:</b> ${escapeHtml(scene.musicCue || "Serious documentary")}</span>
+          <span class="tag"><b>Text:</b> ${escapeHtml(scene.textCallout || "No text needed")}</span>
+        </div>
+        <div>
+          <b>Sound effect to use:</b>
+          <div class="tag-row">
+            <span class="tag">${escapeHtml(scene.sfxDetails?.category || "Transition")}</span>
+            <span class="tag">${escapeHtml(scene.sfxDetails?.timing || scene.timestamp)}</span>
+            <span class="tag">${escapeHtml(scene.sfxDetails?.volume || "8–12% under voiceover")}</span>
+          </div>
+          <p class="muted">${escapeHtml(scene.sfxDetails?.use || "Use a light transition effect only where needed.")}</p>
+          <b>SFX search terms:</b>
+          <div class="tag-row">${(scene.sfxDetails?.searchTerms || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>
+          <b>Sound effect sources to use:</b>
+          <div class="media-grid">${(scene.sfxSources || []).map(mediaCard).join("")}</div>
+        </div>
+        <div>
+          <b>Canva search terms:</b>
+          <div class="tag-row">${(scene.canvaTerms || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>
+        </div>
+        ${mediaHtml}
+      </div>
+    </article>`;
+}
+
+async function pollJob(jobId, progressCard, progressText, progressBar) {
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      try {
+        const job = await readApi(await fetch(`/api/job/${jobId}`));
+        progressCard.classList.remove("hidden");
+        progressText.textContent = job.message || "Working...";
+        progressBar.style.width = `${job.progress || 0}%`;
+        if (job.status === "complete") {
+          clearInterval(timer);
+          resolve(job.result);
+        }
+        if (job.status === "failed") {
+          clearInterval(timer);
+          reject(new Error(job.error || "Job failed."));
+        }
+      } catch (error) {
+        clearInterval(timer);
+        reject(error);
+      }
+    }, 1800);
+  });
+}
+
+document.getElementById("searchBtn").addEventListener("click", async () => {
+  const box = document.getElementById("searchResults");
+  box.innerHTML = `<div class="card"><p class="muted">Searching all selected sources...</p></div>`;
+  try {
+    const payload = {
+      query: document.getElementById("searchQuery").value.trim(),
+      topic: document.getElementById("searchTopic").value.trim(),
+      niche: document.getElementById("searchNiche").value,
+      count: Number(document.getElementById("searchCount").value || 6),
+      sources: selectedSources(),
+    };
+    if (!payload.query) return alert("Enter a search query.");
+    const data = await readApi(await fetch("/api/search-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }));
+    box.innerHTML = `<div class="card"><h2>Results for: ${escapeHtml(data.query)}</h2></div><div id="searchGroups"></div>`;
+    renderMediaGroups(data, document.getElementById("searchGroups"));
+    renderKeyStatus(data.keys || {});
   } catch (error) {
-    alert(error.message);
-  } finally {
-    suggestPlanBtn.disabled = false;
-    suggestPlanBtn.textContent = "Preview suggestions only";
+    box.innerHTML = `<div class="card"><p class="bad">${escapeHtml(error.message)}</p></div>`;
   }
 });
 
-suggestMediaBtn.addEventListener("click", async () => {
-  const script = document.getElementById("suggestScript").value.trim();
-  if (!script) return alert("Paste timestamped text first.");
-  suggestMediaBtn.disabled = true;
-  suggestMediaBtn.textContent = "Finding media...";
-  suggestResults.classList.remove("hidden");
-  suggestResults.innerHTML = "<h2>Finding media examples...</h2><p class='muted'>This can take time on long scripts.</p>";
+document.getElementById("suggestBtn").addEventListener("click", async () => {
+  const script = document.getElementById("script").value.trim();
+  if (!script) return alert("Paste your timestamped script.");
+  const progressCard = document.getElementById("suggestProgress");
+  const progressText = document.getElementById("suggestProgressText");
+  const progressBar = document.getElementById("suggestProgressBar");
+  const results = document.getElementById("suggestResults");
+  results.innerHTML = "";
+  progressCard.classList.remove("hidden");
+  progressText.textContent = "Starting suggestions...";
+  progressBar.style.width = "1%";
+  document.getElementById("suggestBtn").disabled = true;
+
   try {
-    const response = await fetch("/api/suggest-media", {
+    const payload = {
+      script,
+      topic: document.getElementById("topic").value.trim(),
+      niche: document.getElementById("niche").value,
+      count: Number(document.getElementById("mediaPerTimestamp").value || 2),
+      includeLiveMedia: document.getElementById("includeLiveMedia").value === "true",
+      sources: selectedSources(),
+    };
+    const start = await readApi(await fetch("/api/start-suggestions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        script,
-        topic: document.getElementById("suggestTopic").value.trim(),
-        niche: document.getElementById("suggestNiche").value,
-        maxScenes: Number(document.getElementById("maxSuggestScenes")?.value || 25),
-        mediaPerTimestamp: Number(document.getElementById("mediaPerTimestamp")?.value || 3),
-        sources: selectedSources(),
-      }),
-    });
-    const data = await readApiResponse(response);
-    suggestResults.innerHTML = `<h2>Timestamp media examples</h2>
-      <p class="muted">Showing media examples for ${data.scenes.length} timestamp scenes. Results are de-duplicated per timestamp.</p>
-      ${data.scenes.map((scene) => `
-        <article class="scene-item">
-          <div class="scene-num">${escapeHtml(scene.timestamp)} — ${escapeHtml(scene.visualPlan)}</div>
-          <p><strong>Script:</strong> ${escapeHtml(scene.text)}</p>
-          <p><strong>Text on screen:</strong> ${escapeHtml(scene.callout || "No text")}</p>
-          ${renderMediaCards(scene.media || [])}
-        </article>
-      `).join("")}`;
+      body: JSON.stringify(payload),
+    }));
+    const data = await pollJob(start.jobId, progressCard, progressText, progressBar);
+    renderKeyStatus(data.keys || {});
+    results.innerHTML = renderMusicPlan(data.backgroundMusicPlan, data.backgroundMusicResults || []) + data.scenes.map(renderScene).join("");
+    latestSuggestionReport = [
+      "BACKGROUND MUSIC PLAN",
+      `Main mood: ${data.backgroundMusicPlan?.mainMood || ""}`,
+      `Volume: ${data.backgroundMusicPlan?.volumeGuide || ""}`,
+      `Search terms: ${(data.backgroundMusicPlan?.searchTerms || []).join(" | ")}`,
+      `Music sources: ${(data.backgroundMusicResults || []).map((m) => `${m.source}: ${m.url}`).join(" | ")}`,
+      `Use: ${(data.backgroundMusicPlan?.use || []).join(" | ")}`,
+      "",
+      "TIMESTAMP DETAILS",
+      ""
+    ].join("\n") + "\n" + data.scenes.map((s) => [
+      `${s.timestamp} — ${s.text}`,
+      `Visual: ${s.visualPlan}`,
+      `Canva 1: ${s.canvaTerms?.[0] || ""}`,
+      `Canva 2: ${s.canvaTerms?.[1] || ""}`,
+      `SFX: ${s.sfx}`,
+      `SFX use: ${s.sfxDetails?.use || ""}`,
+      `SFX search terms: ${(s.sfxDetails?.searchTerms || []).join(" | ")}`,
+      `SFX sources: ${(s.sfxSources || []).map((m) => `${m.source}: ${m.url}`).join(" | ")}`,
+      `Music cue: ${s.musicCue || "Serious documentary"}`,
+      `Text: ${s.textCallout || "No text needed"}`,
+      `Search query: ${s.query}`,
+      ""
+    ].join("\n")).join("\n");
+    document.getElementById("downloadPlanBtn").disabled = false;
   } catch (error) {
-    suggestResults.innerHTML = `<h2>Media suggestion failed</h2><p class="risk">${escapeHtml(error.message)}</p>`;
+    results.innerHTML = `<div class="card"><p class="bad">${escapeHtml(error.message)}</p></div>`;
   } finally {
-    suggestMediaBtn.disabled = false;
-    suggestMediaBtn.textContent = "Find media examples";
+    document.getElementById("suggestBtn").disabled = false;
   }
 });
+
+document.getElementById("downloadPlanBtn").addEventListener("click", () => {
+  const blob = new Blob([latestSuggestionReport || ""], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "timestamp-media-suggestions.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("videoBtn").addEventListener("click", async () => {
+  const voiceover = document.getElementById("voiceover").files[0];
+  const script = document.getElementById("script").value.trim();
+  if (!voiceover) return alert("Upload voiceover audio.");
+  if (!script) return alert("Paste the timestamped script in the Timestamp suggestions tab first.");
+
+  const progressCard = document.getElementById("videoProgress");
+  const progressText = document.getElementById("videoProgressText");
+  const progressBar = document.getElementById("videoProgressBar");
+  const resultCard = document.getElementById("videoResult");
+  progressCard.classList.remove("hidden");
+  resultCard.classList.add("hidden");
+  progressText.textContent = "Starting video render...";
+  progressBar.style.width = "1%";
+  document.getElementById("videoBtn").disabled = true;
+
+  try {
+    const fd = new FormData();
+    fd.append("voiceover", voiceover);
+    fd.append("script", script);
+    fd.append("topic", document.getElementById("topic").value.trim());
+    fd.append("niche", document.getElementById("niche").value);
+    fd.append("format", document.getElementById("videoFormat").value);
+    fd.append("musicMood", document.getElementById("musicMood").value);
+    const start = await readApi(await fetch("/api/start-video", { method: "POST", body: fd }));
+    const data = await pollJob(start.jobId, progressCard, progressText, progressBar);
+    document.getElementById("videoMeta").textContent = `Duration: ${data.duration}s. Rendered scenes: ${data.renderedScenes}. Parsed timestamps: ${data.parsedTimestamps}.`;
+    document.getElementById("videoDownload").href = data.outputUrl;
+    document.getElementById("videoReport").href = data.reportUrl;
+    resultCard.classList.remove("hidden");
+  } catch (error) {
+    progressText.textContent = error.message;
+  } finally {
+    document.getElementById("videoBtn").disabled = false;
+  }
+});
+
+initControls();
+loadStatus();

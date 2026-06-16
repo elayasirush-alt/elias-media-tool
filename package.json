@@ -1,11 +1,12 @@
 {
-  "name": "elias-media-studio-video-and-media-search",
-  "version": "1.0.0",
-  "description": "Combined timestamped audio video generator, media search, and timestamp media suggestion tool.",
+  "name": "elias-media-render-dashboard",
+  "version": "2.0.0",
+  "description": "Render/GitHub web dashboard for timestamp media suggestions, multi-source search, Canva terms, SFX/text notes, and lightweight video maker.",
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node -c server.js && node -c public/app.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -13,5 +14,8 @@
     "express": "^4.19.2",
     "ffmpeg-static": "^5.2.0",
     "multer": "^1.4.5-lts.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
