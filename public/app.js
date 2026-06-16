@@ -68,11 +68,12 @@ function selectedSources() {
 }
 
 function initControls() {
-  document.querySelectorAll("select[id$='niche'], select#niche, select#searchNiche").forEach((select) => {
+  document.querySelectorAll("select[id$='niche'], select#niche, select#searchNiche, select#videoNiche").forEach((select) => {
     select.innerHTML = NICHES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
   });
   document.getElementById("searchNiche").value = "general";
   document.getElementById("niche").value = "general";
+  if (document.getElementById("videoNiche")) document.getElementById("videoNiche").value = "general";
 
   const sourceBox = document.getElementById("sourceChecks");
   sourceBox.innerHTML = SOURCES.map(([id, label]) => `
@@ -343,9 +344,9 @@ document.getElementById("downloadPlanBtn").addEventListener("click", () => {
 
 document.getElementById("videoBtn").addEventListener("click", async () => {
   const voiceover = document.getElementById("voiceover").files[0];
-  const script = document.getElementById("script").value.trim();
+  const script = (document.getElementById("videoScript")?.value || document.getElementById("script")?.value || "").trim();
   if (!voiceover) return alert("Upload voiceover audio.");
-  if (!script) return alert("Paste the timestamped script in the Timestamp suggestions tab first.");
+  if (!script) return alert("Paste the timestamped script in the Automatic video maker tab.");
 
   const progressCard = document.getElementById("videoProgress");
   const progressText = document.getElementById("videoProgressText");
@@ -361,8 +362,8 @@ document.getElementById("videoBtn").addEventListener("click", async () => {
     const fd = new FormData();
     fd.append("voiceover", voiceover);
     fd.append("script", script);
-    fd.append("topic", document.getElementById("topic").value.trim());
-    fd.append("niche", document.getElementById("niche").value);
+    fd.append("topic", (document.getElementById("videoTopic")?.value || document.getElementById("topic")?.value || "").trim());
+    fd.append("niche", document.getElementById("videoNiche")?.value || document.getElementById("niche")?.value || "general");
     fd.append("format", document.getElementById("videoFormat").value);
     fd.append("musicMood", document.getElementById("musicMood").value);
     const start = await readApi(await fetch("/api/start-video", { method: "POST", body: fd }));
@@ -376,6 +377,17 @@ document.getElementById("videoBtn").addEventListener("click", async () => {
   } finally {
     document.getElementById("videoBtn").disabled = false;
   }
+});
+
+
+document.getElementById("copyMainScriptBtn")?.addEventListener("click", () => {
+  const mainScript = document.getElementById("script")?.value || "";
+  const mainTopic = document.getElementById("topic")?.value || "";
+  const mainNiche = document.getElementById("niche")?.value || "general";
+  if (!mainScript.trim()) return alert("Paste your script in the Timestamp suggestions tab first, or paste directly in this video box.");
+  document.getElementById("videoScript").value = mainScript;
+  document.getElementById("videoTopic").value = mainTopic;
+  document.getElementById("videoNiche").value = mainNiche;
 });
 
 initControls();

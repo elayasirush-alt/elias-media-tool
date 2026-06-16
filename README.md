@@ -107,11 +107,32 @@ Sound effects are also added like media:
 - SFX source links are included in the report.
 
 
-## Browser tab icon restored
+## Favicon force refresh
 
-This version includes:
-- public/favicon.png
+This version includes cache-busted favicon links:
 - public/favicon.ico
-- favicon links in public/index.html
+- public/favicon.png
+- public/favicon-16.png
+- public/favicon-32.png
+- public/favicon-48.png
+- public/favicon-64.png
+- public/favicon-180.png
+- public/favicon-192.png
+- public/favicon-512.png
+- public/site.webmanifest
 
-After deployment, hard-refresh the website or clear browser cache if the old/default icon still appears.
+After deployment, test:
+1. Open /favicon-32.png?v=6 on your live site.
+2. If the image opens, the upload worked.
+3. Hard refresh the browser or open the site in incognito.
+
+
+## Video maker script box
+
+The Automatic video maker now has its own timestamped script box.
+It also includes:
+- Video topic field
+- Video niche field
+- Copy script from Timestamp tab button
+
+This means users do not need to go back to the Timestamp suggestions tab to paste the script before creating a draft MP4.

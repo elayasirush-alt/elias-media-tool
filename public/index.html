@@ -5,9 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Elias Media Render Dashboard</title>
-  <link rel="icon" type="image/png" href="/favicon.png" />
-  <link rel="shortcut icon" href="/favicon.ico" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=6" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=6" />
+  <link rel="apple-touch-icon" href="/favicon-180.png?v=6" />
+  <link rel="shortcut icon" href="/favicon.ico?v=6" />
+  <link rel="manifest" href="/site.webmanifest?v=6" />
 </head>
 <body>
   <main class="shell">
@@ -125,6 +128,12 @@
         <h2>Automatic video maker</h2>
         <p class="muted">This is Render-safe mode. It creates a lightweight MP4 using your voiceover, auto music, subtle SFX, and Pexels/Pixabay videos where available. Keep longer professional rendering for later paid worker setup.</p>
         <div class="grid">
+          <label>Video topic
+            <input id="videoTopic" type="text" placeholder="Example: Trucks Nobody Wants in 2026">
+          </label>
+          <label>Video niche
+            <select id="videoNiche"></select>
+          </label>
           <label>Voiceover audio
             <input id="voiceover" type="file" accept="audio/*">
           </label>
@@ -144,7 +153,16 @@
             </select>
           </label>
         </div>
+        <label class="full">Timestamped script for video
+          <textarea id="videoScript" rows="12" placeholder="Paste the timestamped script here, for example:
+00:00 By May 2026, dealers were holding trucks nobody wanted.
+00:07 Inventory was rising while buyers were walking away.
+00:14 The real problem was not just price. It was trust."></textarea>
+          <small>This video maker now has its own script box. You can also copy the script from the Timestamp suggestions tab.</small>
+        </label>
+
         <div class="actions">
+          <button id="copyMainScriptBtn" type="button" class="ghost">Copy script from Timestamp tab</button>
           <button id="videoBtn">Build safe MP4</button>
         </div>
       </div>
