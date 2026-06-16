@@ -259,12 +259,78 @@
       </section>
 
 
+
+      <section id="videoBuilderSection" class="results-section">
+        <div class="section-header block-header">
+          <div>
+            <p class="section-kicker">Next workflow</p>
+            <h2>Auto Video Builder Settings</h2>
+            <p>Prepare a clean video build plan around your voiceover. This does not add full captions. It only places important text callouts where the story needs emphasis.</p>
+          </div>
+        </div>
+
+        <div class="builder-grid">
+          <div class="builder-card">
+            <h3>1. Voiceover</h3>
+            <p>Upload your finished voiceover MP3/WAV. The future video renderer will build around this audio.</p>
+            <input id="voiceoverInput" type="file" accept="audio/*" />
+            <div id="voiceoverInfo" class="mini-note">No voiceover selected yet.</div>
+          </div>
+
+          <div class="builder-card">
+            <h3>2. Editing style</h3>
+            <label>
+              Video format
+              <select id="builderFormat">
+                <option value="landscape">Landscape 16:9</option>
+                <option value="portrait">Vertical 9:16</option>
+                <option value="square">Square 1:1</option>
+              </select>
+            </label>
+            <label>
+              Transition style
+              <select id="builderTransition">
+                <option value="clean">Clean documentary cuts</option>
+                <option value="soft">Soft dissolves only</option>
+                <option value="news">News/documentary pacing</option>
+              </select>
+            </label>
+            <label>
+              Photo movement
+              <select id="builderPhotoMotion">
+                <option value="slow-zoom">Slow zoom only</option>
+                <option value="slow-pan">Slow pan + zoom</option>
+                <option value="none">No movement</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="builder-card">
+            <h3>3. Text and audio rules</h3>
+            <label class="builder-check"><input id="builderCaptions" type="checkbox" /> Full captions/subtitles</label>
+            <label class="builder-check"><input id="builderCallouts" type="checkbox" checked /> Important text callouts only</label>
+            <label class="builder-check"><input id="builderMusic" type="checkbox" checked /> Low background music</label>
+            <label class="builder-check"><input id="builderSfx" type="checkbox" checked /> Light sound effects only</label>
+            <small>Recommended: keep full captions off, keep text callouts on.</small>
+          </div>
+        </div>
+
+        <div class="builder-actions">
+          <button id="generateBuildPlanBtn" class="secondary-btn" type="button">Generate video build plan</button>
+          <button id="downloadBuildPlanBtn" class="secondary-btn hidden" type="button">Download build plan CSV</button>
+          <button id="copyBuildPlanBtn" class="secondary-btn hidden" type="button">Copy editor instructions</button>
+        </div>
+
+        <div id="buildPlanOutput" class="build-plan-output hidden"></div>
+      </section>
+
+
       <section id="assistantSection" class="results-section hidden">
         <div class="section-header block-header">
           <div>
             <p class="section-kicker">Editing help</p>
-            <h2>Thumbnail and edit assistant</h2>
-            <p>Quick thumbnail ideas, Canva helpers, music/sound links, and CapCut editing notes.</p>
+            <h2>Edit assistant</h2>
+            <p>Canva helpers, music/sound links, selective text callouts, and clean documentary editing notes.</p>
           </div>
         </div>
         <div id="assistantContent"></div>

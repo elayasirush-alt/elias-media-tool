@@ -21,6 +21,15 @@ const assistantSection = document.getElementById("assistantSection");
 const assistantContent = document.getElementById("assistantContent");
 const historyContent = document.getElementById("historyContent");
 const adminContent = document.getElementById("adminContent");
+const videoBuilderSection = document.getElementById("videoBuilderSection");
+const voiceoverInput = document.getElementById("voiceoverInput");
+const voiceoverInfo = document.getElementById("voiceoverInfo");
+const generateBuildPlanBtn = document.getElementById("generateBuildPlanBtn");
+const downloadBuildPlanBtn = document.getElementById("downloadBuildPlanBtn");
+const copyBuildPlanBtn = document.getElementById("copyBuildPlanBtn");
+const buildPlanOutput = document.getElementById("buildPlanOutput");
+let latestBuildPlanRows = [];
+let latestEditorInstructions = "";
 
 let latestTimelineItems = [];
 let latestTimelineContext = { topic: "", guide: "", niche: "general", orientation: "any" };
@@ -185,11 +194,13 @@ function renderAssistant() {
   assistantContent.innerHTML = `
     <div class="assistant-grid">
       <div class="assistant-card">
-        <h3>Thumbnail assistant</h3>
-        <p>Possible thumbnail hook text:</p>
-        <ul>${thumb.hooks.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
-        <p>Thumbnail visual ideas:</p>
-        <ul>${thumb.visuals.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
+        <h3>Production rule</h3>
+        <p>No full captions. Use selective callouts only when a main point, number, warning, or question appears.</p>
+        <ul>
+          <li>Keep transitions invisible.</li>
+          <li>Voiceover must stay louder than music.</li>
+          <li>Mix clips, photos, documents, and close-ups naturally.</li>
+        </ul>
       </div>
       <div class="assistant-card">
         <h3>Canva quick actions</h3>
@@ -224,6 +235,157 @@ function renderAssistant() {
     setTimeout(() => copyBtn.textContent = 'Copy Canva terms', 1000);
   });
 }
+
+function hasQuestion(text) {
+  return /\?|\bwhy\b|\bhow\b|\bwhat\b|\bwhen\b|\bwhere\b|\bdid\b|\bcan\b|\bshould\b/i.test(text || "");
+}
+
+function hasImportantNumber(text) {
+  return /(\$?\d[\d,.]*\s?(million|billion|thousand|%|percent|cars|trucks|people|days|years|hours)?)/i.test(text || "");
+}
+
+function hasMainPoint(text) {
+  return /(problem|failure|recall|warning|lawsuit|investigation|crash|collapse|secret|truth|reason|mistake|cost|damage|risk|decision|turning point|real issue|exposed|danger)/i.test(text || "");
+}
+
+function createCalloutText(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (hasQuestion(clean)) {
+    const question = clean.includes("?") ? clean.split("?")[0] + "?" : clean;
+    return question.slice(0, 55).toUpperCase();
+  }
+  if (hasImportantNumber(clean)) {
+    const match = clean.match(/(\$?\d[\d,.]*\s?(million|billion|thousand|%|percent|cars|trucks|people|days|years|hours)?)/i);
+    if (match) return `${match[0].toUpperCase()} MATTERS`;
+  }
+  if (hasMainPoint(clean)) {
+    return clean.split(" ").filter((w) => w.length > 2).slice(0, 5).join(" ").toUpperCase();
+  }
+  return "";
+}
+
+function getCleanTransition(index, transitionStyle) {
+  if (index === 0) return "Straight cut from intro";
+  if (transitionStyle === "soft") return "Soft 8-frame cross dissolve";
+  if (transitionStyle === "news") return index % 3 === 0 ? "Quick clean cut with subtle push-in" : "Straight cut";
+  return index % 4 === 0 ? "Very soft dissolve" : "Straight cut";
+}
+
+function getVisualMix(item, index) {
+  const type = (item.visualType || "").toLowerCase();
+  if (type.includes("document")) return "Document screenshot or headline with slow zoom";
+  if (type.includes("map")) return "Map/route graphic with slight zoom";
+  if (type.includes("automotive")) return index % 2 === 0 ? "Vehicle clip or dealership shot" : "Mechanic/detail close-up";
+  if (type.includes("aviation")) return index % 2 === 0 ? "Aircraft/airport clip" : "Cockpit/radar/detail shot";
+  if (type.includes("business")) return "Office, chart, money, or company building B-roll";
+  return index % 3 === 0 ? "Wide establishing clip" : index % 3 === 1 ? "Detail close-up clip" : "Photo with slow movement";
+}
+
+function generateVideoBuildPlanRows() {
+  const transitionStyle = document.getElementById("builderTransition")?.value || "clean";
+  const photoMotion = document.getElementById("builderPhotoMotion")?.value || "slow-zoom";
+  const calloutsOn = document.getElementById("builderCallouts")?.checked ?? true;
+  const captionsOn = document.getElementById("builderCaptions")?.checked ?? false;
+  const musicOn = document.getElementById("builderMusic")?.checked ?? true;
+  const sfxOn = document.getElementById("builderSfx")?.checked ?? true;
+
+  const rows = [["Timestamp", "Script line", "Visual mix", "Transition", "Text on screen", "Audio rule", "SFX", "Photo motion"]];
+  (latestTimelineItems || []).forEach((item, index) => {
+    const edit = inferEditGuide(item);
+    const callout = calloutsOn ? createCalloutText(item.scriptLine) : "";
+    const sfx = sfxOn ? edit.sfx : "None";
+    const audio = musicOn ? "Voiceover primary, music at low volume under voice" : "Voiceover primary, no music";
+    rows.push([
+      item.timestamp || "",
+      item.scriptLine || "",
+      getVisualMix(item, index),
+      getCleanTransition(index, transitionStyle),
+      captionsOn ? "Full captions enabled" : (callout || "No text here"),
+      audio,
+      sfx,
+      photoMotion === "none" ? "None" : photoMotion.replace("-", " "),
+    ]);
+  });
+  return rows;
+}
+
+function renderBuildPlan() {
+  if (!latestTimelineItems.length) {
+    setStatus("First analyze a timestamped script, then generate the video build plan.");
+    return;
+  }
+
+  latestBuildPlanRows = generateVideoBuildPlanRows();
+  const voiceFile = voiceoverInput?.files?.[0];
+  const format = document.getElementById("builderFormat")?.value || "landscape";
+  const captionsOn = document.getElementById("builderCaptions")?.checked ?? false;
+
+  latestEditorInstructions =
+`VIDEO BUILD RULES
+Format: ${format}
+Voiceover: ${voiceFile ? voiceFile.name : "Not uploaded yet"}
+Captions: ${captionsOn ? "ON" : "OFF"}
+Text: Important callouts only, not full captions
+Transitions: Clean, subtle, not noticeable
+Music: Low background music under voiceover
+SFX: Light sound effects only, never louder than voice
+Photos: Use slow zoom/pan so they do not feel like slideshows
+Thumbnail: User will create separately`;
+
+  const bodyRows = latestBuildPlanRows.slice(1).map((row) => `
+    <tr>
+      <td>${escapeHtml(row[0])}</td>
+      <td>${escapeHtml(row[2])}</td>
+      <td>${escapeHtml(row[3])}</td>
+      <td>${escapeHtml(row[4])}</td>
+      <td>${escapeHtml(row[6])}</td>
+    </tr>
+  `).join("");
+
+  buildPlanOutput.innerHTML = `
+    <div class="builder-card full-width">
+      <h3>Video build plan ready</h3>
+      <pre class="instructions-box">${escapeHtml(latestEditorInstructions)}</pre>
+      <div class="table-wrap">
+        <table class="build-table">
+          <thead><tr><th>Time</th><th>Visual</th><th>Transition</th><th>Text</th><th>SFX</th></tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  buildPlanOutput.classList.remove("hidden");
+  downloadBuildPlanBtn?.classList.remove("hidden");
+  copyBuildPlanBtn?.classList.remove("hidden");
+  setStatus("Video build plan created. This is the blueprint for the future auto-renderer.");
+}
+
+if (voiceoverInput) {
+  voiceoverInput.addEventListener("change", () => {
+    const file = voiceoverInput.files?.[0];
+    voiceoverInfo.textContent = file ? `Selected: ${file.name} (${Math.round(file.size / 1024 / 1024 * 10) / 10} MB)` : "No voiceover selected yet.";
+  });
+}
+
+if (generateBuildPlanBtn) {
+  generateBuildPlanBtn.addEventListener("click", renderBuildPlan);
+}
+
+if (downloadBuildPlanBtn) {
+  downloadBuildPlanBtn.addEventListener("click", () => {
+    if (!latestBuildPlanRows.length) return renderBuildPlan();
+    downloadCsv("elias-media-video-build-plan.csv", latestBuildPlanRows);
+  });
+}
+
+if (copyBuildPlanBtn) {
+  copyBuildPlanBtn.addEventListener("click", async () => {
+    await copyText(latestEditorInstructions);
+    copyBuildPlanBtn.textContent = "Copied";
+    setTimeout(() => (copyBuildPlanBtn.textContent = "Copy editor instructions"), 1000);
+  });
+}
+
 function renderSourceLinks(groups) {
   sourceLinks.innerHTML = "";
   groups.forEach((group) => {

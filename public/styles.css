@@ -648,3 +648,89 @@ button:hover, .button-link:hover { filter: brightness(1.08); transform: translat
   .timeline-item, .assistant-card, .guide-row { break-inside: avoid; color:black; border-color:#ccc; }
   .shell { max-width:none; padding:0; }
 }
+
+
+.builder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.builder-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255,255,255,0.03);
+}
+
+.builder-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.builder-card label {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.builder-card input[type="file"],
+.builder-card select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  color: var(--text);
+  background: rgba(4, 8, 20, 0.82);
+}
+
+.builder-check {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px !important;
+  color: var(--muted);
+}
+
+.builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.mini-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.instructions-box {
+  white-space: pre-wrap;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(0,0,0,0.25);
+  color: var(--text);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.build-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+}
+
+.build-table th,
+.build-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.build-table th {
+  color: var(--accent);
+}

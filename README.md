@@ -94,3 +94,17 @@ This version reduces repeated media results and adds up to 10 direct result sour
 
 
 Fix note: both Start a search and Timestamped script mode now return all 10 source panels.
+
+
+## Auto Video Builder Settings
+
+This version adds a planning panel for the future auto-video renderer:
+- Voiceover upload field
+- No full captions by default
+- Selective text callouts only for main points/questions/numbers
+- Clean invisible transitions
+- Photo movement rules
+- Low music and light sound effects rules
+- Downloadable video build plan CSV
+
+This is the blueprint stage. The next stage is the real FFmpeg video renderer that exports MP4.
