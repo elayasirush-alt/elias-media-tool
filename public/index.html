@@ -40,7 +40,7 @@
 
     <section id="build" class="tab-panel active">
       <section class="notice">
-        <strong>Best format:</strong> Paste each line like <code>00:00 Your sentence here</code> or <code>(0:00) Your sentence here</code>.
+        <strong>Best format:</strong> Paste each line like <code>00:00 Your sentence here</code> or <code>(0:00) Your sentence here</code>. For up to 500 scenes, choose High detail render mode and keep the page open while it renders.
       </section>
 
       <section class="builder-card">
@@ -54,9 +54,9 @@
             </label>
 
             <label>
-              Background music (optional)
+              Background music upload (optional)
               <input id="music" name="music" type="file" accept="audio/*" />
-              <small>If uploaded, music is mixed quietly under the voice.</small>
+              <small>Optional. If you choose uploaded music, it is mixed quietly under the voice.</small>
             </label>
 
             <label>
@@ -94,6 +94,44 @@
                 <option value="none">No movement</option>
               </select>
             </label>
+
+            <label>
+              Render mode
+              <select id="renderMode" name="renderMode">
+                <option value="exact">High detail: render every timestamp line, up to 500</option>
+                <option value="fast">Fast: merge short lines for Render Free</option>
+              </select>
+              <small>Use high detail for many scenes. Keep the page open while rendering.</small>
+            </label>
+
+            <label>
+              Background music
+              <select id="audioMode" name="audioMode">
+                <option value="auto">Auto free cinematic music</option>
+                <option value="upload">Use uploaded music</option>
+                <option value="off">No background music</option>
+              </select>
+              <small>Auto music is generated inside the tool, so it is free and reliable.</small>
+            </label>
+
+            <label>
+              Music mood
+              <select id="musicMood" name="musicMood">
+                <option value="documentary">Serious documentary</option>
+                <option value="tension">Dark corporate tension</option>
+                <option value="energetic">Energetic modern</option>
+                <option value="warm">Warm emotional</option>
+              </select>
+            </label>
+
+            <label>
+              Sound effects
+              <select id="sfxMode" name="sfxMode">
+                <option value="auto">Auto subtle sound effects</option>
+                <option value="off">No sound effects</option>
+              </select>
+              <small>Light whooshes, soft hits, and number accents are mixed low under the voice.</small>
+            </label>
           </div>
 
           <label class="full">
@@ -105,7 +143,7 @@
           </label>
 
           <div class="checks">
-            <label><input id="useMusic" name="useMusic" type="checkbox" checked /> Use background music if uploaded</label>
+            <label><input id="useMusic" name="useMusic" type="checkbox" checked disabled /> Voiceover-first audio mix</label>
             <label><input type="checkbox" checked disabled /> No full captions/subtitles</label>
             <label><input type="checkbox" checked disabled /> Clean invisible transitions</label>
           </div>

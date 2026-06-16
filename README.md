@@ -43,3 +43,50 @@ APP_PASSWORD=
 - Search and timestamp suggestions can show results from all supported sources.
 - YouTube is reference only and not downloadable.
 - Important text callouts are saved in the scene/source report. They are not burned into MP4 because Render's ffmpeg-static build may not include drawtext.
+
+
+## Render stable long-script fix
+
+This version fixes:
+- Empty JSON errors when Render returns an empty/error response.
+- Very long scripts with 100+ timestamp lines overwhelming Render.
+- The renderer now merges many short timestamp lines into fewer render scenes.
+
+Optional Render environment variables:
+MAX_RENDER_SCENES=45
+RENDER_TARGET_SCENE_SECONDS=10
+
+For Render Free, keep MAX_RENDER_SCENES around 35-45.
+
+
+## 500 Scene Mode
+
+This version adds background render jobs and live progress polling so the page does not depend on one long request.
+
+New behavior:
+- High detail mode can render every timestamp line up to MAX_RENDER_SCENES.
+- Default MAX_RENDER_SCENES is 500.
+- The browser polls `/api/job/:id` every few seconds.
+- Keep the page open until the render finishes.
+- Fast mode is still available for Render Free by merging short lines.
+
+Recommended Render variables:
+MAX_RENDER_SCENES=500
+RENDER_TARGET_SCENE_SECONDS=10
+
+Important: 500 scenes is heavy. It may take a long time on Render Free, and a stronger server is recommended for daily long-form production.
+
+
+## Auto Music and Sound Effects
+
+This version adds:
+- Auto free cinematic background music generated inside the tool.
+- Auto subtle sound effects generated inside the tool.
+- Music moods: serious documentary, dark corporate tension, energetic modern, warm emotional.
+- Uploaded music option still available.
+- Voiceover-first mixing: voice stays primary, music and SFX are mixed low.
+
+Why generated audio instead of Pexels/Pixabay auto-download?
+- Pexels API provides photos and videos, not a music/SFX API.
+- Pixabay has music and sound effects on its website, but the official API documentation is primarily for images and videos.
+- Generated audio is more reliable for automatic rendering and avoids fragile scraping.

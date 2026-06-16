@@ -124,6 +124,16 @@ app.use(requireLogin);
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/renders", express.static(RENDER_DIR));
 
+const JOBS = new Map();
+const MAX_JOB_AGE_MS = 6 * 60 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of JOBS.entries()) {
+    if (now - job.createdAt > MAX_JOB_AGE_MS) JOBS.delete(id);
+  }
+}, 30 * 60 * 1000);
+
+
 const STOPWORDS = new Set("the a an and or but of to in on for with from by as is are was were be been being this that these those it its into about after before during while where when what why how do does did can could should would will just your you they them their has have had not no yes more most very really started through every across over under".split(" "));
 
 function safeText(value) {
@@ -582,7 +592,232 @@ function makePartArgs(inputPath, duration, dims, text, photoMotion, outPath) {
   ];
 }
 
-async function renderVideo({ audioPath, musicPath, topic, niche, format, script, useMusic, photoMotion }) {
+
+function combineScenesForRender(scenes = [], audioDuration = 0) {
+  const targetSeconds = Number(process.env.RENDER_TARGET_SCENE_SECONDS || 10);
+  const maxScenes = Number(process.env.MAX_RENDER_SCENES || 45);
+  const combined = [];
+  let current = null;
+
+  for (const scene of scenes) {
+    if (!current) {
+      current = { ...scene, textParts: [scene.text], flags: [...(scene.riskFlags || [])] };
+      continue;
+    }
+
+    const canMerge = current.duration < targetSeconds && (current.duration + scene.duration) <= Math.max(16, targetSeconds + 6);
+    if (canMerge) {
+      current.duration += scene.duration;
+      current.end = scene.end;
+      current.textParts.push(scene.text);
+      current.text = current.textParts.join(" ");
+      current.query = buildSceneQuery(current.text, "", "documentary");
+      current.callout = current.callout || scene.callout;
+      current.riskFlags = [...new Set([...(current.riskFlags || []), ...(scene.riskFlags || [])])];
+      current.visualPlan = current.visualPlan || scene.visualPlan;
+    } else {
+      combined.push(current);
+      current = { ...scene, textParts: [scene.text], flags: [...(scene.riskFlags || [])] };
+    }
+  }
+  if (current) combined.push(current);
+
+  if (combined.length <= maxScenes) {
+    return combined.map((scene, index) => ({ ...scene, scene: index + 1 }));
+  }
+
+  // Second pass: merge further if the script is very long, so Render does not timeout.
+  const ratio = Math.ceil(combined.length / maxScenes);
+  const reduced = [];
+  for (let i = 0; i < combined.length; i += ratio) {
+    const chunk = combined.slice(i, i + ratio);
+    const first = chunk[0];
+    const text = chunk.map((s) => s.text).join(" ");
+    reduced.push({
+      ...first,
+      scene: reduced.length + 1,
+      duration: chunk.reduce((sum, item) => sum + item.duration, 0),
+      end: chunk[chunk.length - 1].end,
+      text,
+      query: buildSceneQuery(text, "", "documentary"),
+      callout: first.callout || chunk.find((s) => s.callout)?.callout || "",
+      riskFlags: [...new Set(chunk.flatMap((s) => s.riskFlags || []))],
+      visualPlan: first.visualPlan || chunk[0].visualPlan,
+    });
+  }
+  return reduced;
+}
+
+
+
+function chooseScenesForRender(originalScenes = [], audioDuration = 0, renderMode = "exact") {
+  const hardLimit = Number(process.env.MAX_RENDER_SCENES || 500);
+  if (renderMode === "exact") {
+    return originalScenes.slice(0, hardLimit).map((scene, index) => ({ ...scene, scene: index + 1 }));
+  }
+  return combineScenesForRender(originalScenes, audioDuration);
+}
+
+
+
+function writeWavPcm16(filePath, samples, sampleRate = 22050) {
+  const dataSize = samples.length * 2;
+  const buffer = Buffer.alloc(44 + dataSize);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]));
+    buffer.writeInt16LE(Math.round(v * 32767), 44 + i * 2);
+  }
+  fs.writeFileSync(filePath, buffer);
+}
+
+function createAutoMusicBed(duration, mood, outPath) {
+  const sampleRate = 22050;
+  const total = Math.max(1, Math.ceil(duration * sampleRate));
+  const samples = new Float32Array(total);
+
+  const palettes = {
+    documentary: [55, 82.41, 110, 164.81, 220],
+    tension: [49, 73.42, 98, 146.83, 196],
+    energetic: [65.41, 98, 130.81, 196, 261.63],
+    warm: [58.27, 87.31, 116.54, 174.61, 233.08],
+  };
+  const freqs = palettes[mood] || palettes.documentary;
+
+  for (let i = 0; i < total; i++) {
+    const t = i / sampleRate;
+    const fadeIn = Math.min(1, t / 4);
+    const fadeOut = Math.min(1, (duration - t) / 4);
+    const env = Math.max(0, Math.min(fadeIn, fadeOut));
+    const pulse = 0.65 + 0.35 * Math.sin(2 * Math.PI * 0.06 * t);
+    let value = 0;
+    for (let j = 0; j < freqs.length; j++) {
+      value += Math.sin(2 * Math.PI * freqs[j] * t + j * 0.7) * (j === 0 ? 0.04 : 0.025);
+    }
+    // Very subtle texture, not real noise-heavy, so voice stays clean.
+    value += Math.sin(2 * Math.PI * 0.33 * t) * 0.015;
+    samples[i] = value * env * pulse;
+  }
+
+  writeWavPcm16(outPath, samples, sampleRate);
+  return outPath;
+}
+
+function addDecayingSine(samples, sampleRate, startSec, freq, lengthSec, amp) {
+  const start = Math.max(0, Math.floor(startSec * sampleRate));
+  const length = Math.floor(lengthSec * sampleRate);
+  for (let i = 0; i < length && start + i < samples.length; i++) {
+    const t = i / sampleRate;
+    const env = Math.exp(-5.5 * t / lengthSec);
+    samples[start + i] += Math.sin(2 * Math.PI * freq * t) * amp * env;
+  }
+}
+
+function addWhoosh(samples, sampleRate, startSec, lengthSec, amp) {
+  const start = Math.max(0, Math.floor(startSec * sampleRate));
+  const length = Math.floor(lengthSec * sampleRate);
+  let seed = 1234567 + Math.floor(startSec * 1000);
+  function noise() {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return (seed / 4294967296) * 2 - 1;
+  }
+  for (let i = 0; i < length && start + i < samples.length; i++) {
+    const t = i / sampleRate;
+    const sweep = Math.sin(2 * Math.PI * (250 + 2200 * (i / Math.max(1, length))) * t);
+    const env = Math.sin(Math.PI * i / Math.max(1, length));
+    samples[start + i] += (0.55 * noise() + 0.45 * sweep) * amp * env;
+  }
+}
+
+function createAutoSfxBed(duration, scenes = [], mood, outPath) {
+  const sampleRate = 22050;
+  const total = Math.max(1, Math.ceil(duration * sampleRate));
+  const samples = new Float32Array(total);
+
+  const maxCues = Number(process.env.MAX_SFX_CUES || 80);
+  let cues = 0;
+  const step = Math.max(1, Math.ceil(scenes.length / Math.max(1, maxCues)));
+
+  for (let i = 0; i < scenes.length; i += step) {
+    const scene = scenes[i];
+    const start = Math.max(0.15, Number(scene.start || 0) + 0.08);
+    const text = `${scene.text || ""} ${scene.callout || ""}`;
+    const important = (scene.callout || "").length || (scene.riskFlags || []).length || /\b(warning|problem|failure|cost|million|billion|percent|strategy|question|risk)\b/i.test(text);
+    if (!important && i % (step * 3) !== 0) continue;
+
+    if (/\?|\bquestion|why|how\b/i.test(text)) {
+      addWhoosh(samples, sampleRate, Math.max(0, start - 0.18), 0.45, 0.018);
+      addDecayingSine(samples, sampleRate, start + 0.05, 180, 0.35, 0.035);
+    } else if (/\b(warning|failure|problem|collapse|risk|damage|lawsuit|recall)\b/i.test(text)) {
+      addDecayingSine(samples, sampleRate, start, 72, 0.75, 0.05);
+      addDecayingSine(samples, sampleRate, start + 0.02, 118, 0.55, 0.028);
+    } else if (/(\$?\d[\d,.]*|million|billion|percent|%|days)/i.test(text)) {
+      addDecayingSine(samples, sampleRate, start, 440, 0.13, 0.025);
+      addDecayingSine(samples, sampleRate, start + 0.12, 660, 0.13, 0.018);
+    } else {
+      addWhoosh(samples, sampleRate, Math.max(0, start - 0.18), 0.34, 0.012);
+    }
+    cues++;
+    if (cues >= maxCues) break;
+  }
+
+  // Safety limiter
+  for (let i = 0; i < samples.length; i++) {
+    samples[i] = Math.max(-0.22, Math.min(0.22, samples[i]));
+  }
+  writeWavPcm16(outPath, samples, sampleRate);
+  return outPath;
+}
+
+function buildAudioMixArgs({ silentVideo, audioPath, musicPath, autoMusicPath, sfxPath, audioDuration, outputPath }) {
+  const args = ["-y", "-i", silentVideo, "-i", audioPath];
+  let inputIndex = 2;
+  const labels = ["[voice]"];
+  const filters = ["[1:a]volume=1.0[voice]"];
+
+  if (musicPath) {
+    args.push("-stream_loop", "-1", "-i", musicPath);
+    filters.push(`[${inputIndex}:a]volume=0.10,atrim=0:${audioDuration}[music]`);
+    labels.push("[music]");
+    inputIndex++;
+  } else if (autoMusicPath) {
+    args.push("-i", autoMusicPath);
+    filters.push(`[${inputIndex}:a]volume=0.75,atrim=0:${audioDuration}[music]`);
+    labels.push("[music]");
+    inputIndex++;
+  }
+
+  if (sfxPath) {
+    args.push("-i", sfxPath);
+    filters.push(`[${inputIndex}:a]volume=0.55,atrim=0:${audioDuration}[sfx]`);
+    labels.push("[sfx]");
+    inputIndex++;
+  }
+
+  if (labels.length === 1) {
+    args.push("-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", outputPath);
+    return args;
+  }
+
+  filters.push(`${labels.join("")}amix=inputs=${labels.length}:duration=first:dropout_transition=2[a]`);
+  args.push("-filter_complex", filters.join(";"), "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", outputPath);
+  return args;
+}
+
+
+async function renderVideo({ audioPath, musicPath, topic, niche, format, script, useMusic, photoMotion, renderMode = 'exact', jobId = '', onProgress = null, audioMode = 'auto', sfxMode = 'auto', musicMood = 'documentary' }) {
   usedMediaUrls.clear();
 
   const id = crypto.randomBytes(8).toString("hex");
@@ -591,14 +826,17 @@ async function renderVideo({ audioPath, musicPath, topic, niche, format, script,
 
   const audioDuration = Math.max(8, Math.min(await mediaDuration(audioPath), 1200));
   const dims = dimensions(format);
-  const scenes = parseTimestampedScript(script, audioDuration, topic, niche);
-  if (!scenes.length) throw new Error("No valid timestamps found. Use lines like 00:00 Your sentence here or (0:00) Your sentence here.");
+  const originalScenes = parseTimestampedScript(script, audioDuration, topic, niche);
+  if (!originalScenes.length) throw new Error("No valid timestamps found. Use lines like 00:00 Your sentence here or (0:00) Your sentence here.");
+
+  const scenes = chooseScenesForRender(originalScenes, audioDuration, renderMode);
 
   const parts = [];
   const sourceReport = [];
 
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
+    if (onProgress) onProgress({ stage: "rendering", current: i + 1, total: scenes.length, message: `Rendering scene ${i + 1} of ${scenes.length}` });
     const partPath = path.join(workDir, `part-${String(i).padStart(3, "0")}.mp4`);
     const chosen = await getBestStockForScene(scene, niche);
 
@@ -620,6 +858,7 @@ async function renderVideo({ audioPath, musicPath, topic, niche, format, script,
     parts.push(partPath);
   }
 
+  if (onProgress) onProgress({ stage: "concat", current: scenes.length, total: scenes.length, message: "Combining rendered scenes..." });
   const listPath = path.join(workDir, "concat.txt");
   fs.writeFileSync(listPath, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
 
@@ -629,23 +868,45 @@ async function renderVideo({ audioPath, musicPath, topic, niche, format, script,
   const outputName = `${slugify(topic || "timestamped-video")}-${id}.mp4`;
   const outputPath = path.join(RENDER_DIR, outputName);
 
-  if (useMusic === "true" && musicPath) {
-    await execFileAsync(ffmpegPath, [
-      "-y", "-i", silentVideo, "-i", audioPath, "-stream_loop", "-1", "-i", musicPath,
-      "-filter_complex", `[2:a]volume=0.10,atrim=0:${audioDuration}[m];[1:a]volume=1.0[v];[v][m]amix=inputs=2:duration=first:dropout_transition=2[a]`,
-      "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", outputPath,
-    ], { timeout: 240000 });
-  } else {
-    await execFileAsync(ffmpegPath, [
-      "-y", "-i", silentVideo, "-i", audioPath, "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", outputPath,
-    ], { timeout: 240000 });
+  if (onProgress) onProgress({ stage: "audio", current: scenes.length, total: scenes.length, message: "Designing music and sound effects..." });
+
+  let autoMusicPath = "";
+  let sfxPath = "";
+  const shouldUseUploadedMusic = audioMode === "upload" && musicPath;
+  const shouldUseAutoMusic = audioMode === "auto" || (audioMode === "upload" && !musicPath);
+  const shouldUseSfx = sfxMode === "auto";
+
+  if (shouldUseAutoMusic) {
+    autoMusicPath = path.join(workDir, "auto-music.wav");
+    createAutoMusicBed(audioDuration, musicMood, autoMusicPath);
   }
 
+  if (shouldUseSfx) {
+    sfxPath = path.join(workDir, "auto-sfx.wav");
+    createAutoSfxBed(audioDuration, scenes, musicMood, sfxPath);
+  }
+
+  if (onProgress) onProgress({ stage: "audio", current: scenes.length, total: scenes.length, message: "Mixing voiceover, music, and sound effects..." });
+
+  const audioArgs = buildAudioMixArgs({
+    silentVideo,
+    audioPath,
+    musicPath: shouldUseUploadedMusic ? musicPath : "",
+    autoMusicPath,
+    sfxPath,
+    audioDuration,
+    outputPath,
+  });
+  await execFileAsync(ffmpegPath, audioArgs, { timeout: 260000 });
+
   const reportName = outputName.replace(".mp4", "-source-report.txt");
+  sourceReport.unshift(`AUDIO DESIGN\nMusic mode: ${audioMode}\nMusic mood: ${musicMood}\nSound effects: ${sfxMode}\nVoiceover rule: voice stays primary, music and SFX are mixed low.\n`);
   fs.writeFileSync(path.join(RENDER_DIR, reportName), sourceReport.join("\n"));
+  if (onProgress) onProgress({ stage: "complete", current: scenes.length, total: scenes.length, message: "Video ready." });
   return {
     duration: Math.round(audioDuration),
     scenes: scenes.length,
+    originalScenes: originalScenes.length,
     outputUrl: `/renders/${outputName}`,
     reportUrl: `/renders/${reportName}`,
     riskFlags: [...new Set(scenes.flatMap((s) => s.riskFlags || []))],
@@ -715,6 +976,10 @@ app.post(
       const script = String(req.body.script || "");
       const useMusic = String(req.body.useMusic || "false");
       const photoMotion = String(req.body.photoMotion || "slow-zoom");
+      const renderMode = String(req.body.renderMode || "exact");
+      const audioMode = String(req.body.audioMode || "auto");
+      const sfxMode = String(req.body.sfxMode || "auto");
+      const musicMood = String(req.body.musicMood || "documentary");
 
       const result = await renderVideo({
         audioPath: voiceover.path,
@@ -725,6 +990,10 @@ app.post(
         script,
         useMusic,
         photoMotion,
+        renderMode,
+        audioMode,
+        sfxMode,
+        musicMood,
       });
 
       res.json(result);
@@ -734,6 +1003,115 @@ app.post(
     }
   }
 );
+
+
+app.post(
+  "/api/start-build-video",
+  upload.fields([
+    { name: "voiceover", maxCount: 1 },
+    { name: "music", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const voiceover = req.files?.voiceover?.[0];
+      if (!voiceover) return res.status(400).json({ error: "Upload a voiceover audio file first." });
+
+      const music = req.files?.music?.[0];
+      const topic = String(req.body.topic || "").trim();
+      const niche = String(req.body.niche || "documentary");
+      const format = String(req.body.format || "landscape");
+      const script = String(req.body.script || "");
+      const useMusic = String(req.body.useMusic || "false");
+      const photoMotion = String(req.body.photoMotion || "slow-zoom");
+      const renderMode = String(req.body.renderMode || "exact");
+      const audioMode = String(req.body.audioMode || "auto");
+      const sfxMode = String(req.body.sfxMode || "auto");
+      const musicMood = String(req.body.musicMood || "documentary");
+
+      const estimatedScenes = parseTimestampedScript(script, 0, topic, niche);
+      if (!estimatedScenes.length) return res.status(400).json({ error: "No valid timestamps found. Use lines like 00:00 Your sentence here or (0:00) Your sentence here." });
+
+      const jobId = crypto.randomBytes(10).toString("hex");
+      const job = {
+        id: jobId,
+        status: "queued",
+        progress: 0,
+        current: 0,
+        total: estimatedScenes.length,
+        message: "Queued. Keep this page open while it renders.",
+        createdAt: Date.now(),
+        outputUrl: "",
+        reportUrl: "",
+        error: "",
+        result: null,
+      };
+      JOBS.set(jobId, job);
+      res.json({ jobId, totalScenes: estimatedScenes.length, message: job.message });
+
+      setImmediate(async () => {
+        try {
+          job.status = "running";
+          job.message = "Starting render...";
+          const result = await renderVideo({
+            audioPath: voiceover.path,
+            musicPath: music?.path || "",
+            topic,
+            niche,
+            format,
+            script,
+            useMusic,
+            photoMotion,
+            renderMode,
+            audioMode,
+            sfxMode,
+            musicMood,
+            jobId,
+            onProgress: (p) => {
+              job.current = p.current || job.current;
+              job.total = p.total || job.total;
+              job.message = p.message || job.message;
+              const base = p.stage === "audio" ? 92 : p.stage === "concat" ? 88 : p.stage === "complete" ? 100 : Math.min(85, Math.round((job.current / Math.max(1, job.total)) * 85));
+              job.progress = base;
+            },
+          });
+          job.status = "complete";
+          job.progress = 100;
+          job.message = "Video ready.";
+          job.outputUrl = result.outputUrl;
+          job.reportUrl = result.reportUrl;
+          job.result = result;
+        } catch (error) {
+          console.error(error);
+          job.status = "failed";
+          job.progress = 100;
+          job.error = error.message || "Video build failed.";
+          job.message = job.error;
+        }
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: error.message || "Could not start video build." });
+    }
+  }
+);
+
+app.get("/api/job/:id", (req, res) => {
+  const job = JOBS.get(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found. It may have expired or the server restarted." });
+  res.json({
+    id: job.id,
+    status: job.status,
+    progress: job.progress,
+    current: job.current,
+    total: job.total,
+    message: job.message,
+    outputUrl: job.outputUrl,
+    reportUrl: job.reportUrl,
+    error: job.error,
+    result: job.result,
+  });
+});
+
 
 app.listen(PORT, () => {
   console.log(`Elias Media Studio running on http://localhost:${PORT}`);

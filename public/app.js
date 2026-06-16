@@ -23,6 +23,24 @@ tabs.forEach((tab) => {
   });
 });
 
+
+async function readApiResponse(response) {
+  const text = await response.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      data = { error: text.slice(0, 500) };
+    }
+  }
+  if (!response.ok) {
+    throw new Error(data.error || `Server error ${response.status}. This usually means the render was too heavy or the service restarted.`);
+  }
+  return data;
+}
+
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -72,7 +90,7 @@ function fakeProgress() {
   clearInterval(progressTimer);
   progressTimer = setInterval(() => {
     p = Math.min(p + Math.random() * 5, 88);
-    setProgress(p, "Building video... selecting clips, timing scenes, mixing audio, and rendering MP4.");
+    setProgress(p, "Building video... selecting clips, timing scenes, designing music/SFX, and rendering MP4.");
   }, 2500);
 }
 
@@ -109,8 +127,7 @@ async function previewPlan() {
         audioDuration: 0,
       }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not read script.");
+    const data = await readApiResponse(response);
     renderScenePlan(data);
     scenePlanCard.scrollIntoView({ behavior: "smooth" });
   } catch (error) {
@@ -144,6 +161,10 @@ form.addEventListener("submit", async (event) => {
   formData.append("format", document.getElementById("format").value);
   formData.append("photoMotion", document.getElementById("photoMotion").value);
   formData.append("useMusic", document.getElementById("useMusic").checked ? "true" : "false");
+  formData.append("renderMode", document.getElementById("renderMode")?.value || "exact");
+  formData.append("audioMode", document.getElementById("audioMode")?.value || "auto");
+  formData.append("sfxMode", document.getElementById("sfxMode")?.value || "auto");
+  formData.append("musicMood", document.getElementById("musicMood")?.value || "documentary");
 
   buildBtn.disabled = true;
   buildBtn.textContent = "Building...";
@@ -151,19 +172,10 @@ form.addEventListener("submit", async (event) => {
   fakeProgress();
 
   try {
-    const response = await fetch("/api/build-video", { method: "POST", body: formData });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Video build failed.");
-
+        const startResponse = await fetch("/api/start-build-video", { method: "POST", body: formData });
+    const startData = await readApiResponse(startResponse);
     clearInterval(progressTimer);
-    setProgress(100, "Video ready.");
-
-    const flags = data.riskFlags || [];
-    resultMeta.innerHTML = `Duration: <strong>${data.duration}s</strong>. Scenes used: <strong>${data.scenes}</strong>. Risk flags: <span class="${flags.length ? "risk" : "ok"}">${escapeHtml(flags.join(", ") || "None")}</span>.`;
-    downloadVideo.href = data.outputUrl;
-    downloadReport.href = data.reportUrl;
-    resultCard.classList.remove("hidden");
-    resultCard.scrollIntoView({ behavior: "smooth" });
+    await pollRenderJob(startData.jobId);
   } catch (error) {
     clearInterval(progressTimer);
     setProgress(100, error.message || "Something went wrong.");
@@ -172,6 +184,47 @@ form.addEventListener("submit", async (event) => {
     buildBtn.textContent = "2. Build video draft";
   }
 });
+
+
+async function pollRenderJob(jobId) {
+  setProgress(3, "Render job started. Keep this page open.");
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/job/${jobId}`);
+        const job = await readApiResponse(response);
+        setProgress(job.progress || 1, job.message || "Rendering...");
+        if (job.total) {
+          progressText.textContent = `${job.message || "Rendering..."} (${job.current || 0}/${job.total} scenes)`;
+        }
+
+        if (job.status === "complete") {
+          clearInterval(timer);
+          const data = job.result || {};
+          setProgress(100, "Video ready.");
+          const flags = data.riskFlags || [];
+          resultMeta.innerHTML = `Duration: <strong>${data.duration || ""}s</strong>. Render scenes used: <strong>${data.scenes || job.total}</strong> from <strong>${data.originalScenes || job.total}</strong> timestamp lines. Risk flags: <span class="${flags.length ? "risk" : "ok"}">${escapeHtml(flags.join(", ") || "None")}</span>.`;
+          downloadVideo.href = job.outputUrl || data.outputUrl;
+          downloadReport.href = job.reportUrl || data.reportUrl;
+          resultCard.classList.remove("hidden");
+          resultCard.scrollIntoView({ behavior: "smooth" });
+          resolve(job);
+        }
+
+        if (job.status === "failed") {
+          clearInterval(timer);
+          setProgress(100, job.error || "Render failed.");
+          reject(new Error(job.error || "Render failed."));
+        }
+      } catch (error) {
+        clearInterval(timer);
+        setProgress(100, error.message || "Could not read render status.");
+        reject(error);
+      }
+    }, 3000);
+  });
+}
+
 
 // Media search mode
 const mediaSearchBtn = document.getElementById("mediaSearchBtn");
@@ -226,8 +279,7 @@ mediaSearchBtn.addEventListener("click", async () => {
         count: 6,
       }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Search failed.");
+    const data = await readApiResponse(response);
     renderGroupedResults(data, mediaResults, "Media results");
   } catch (error) {
     mediaResults.innerHTML = `<h2>Search failed</h2><p class="risk">${escapeHtml(error.message)}</p>`;
@@ -255,8 +307,7 @@ async function parseSuggestScript() {
       audioDuration: 0,
     }),
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Could not read script.");
+  const data = await readApiResponse(response);
   return data;
 }
 
@@ -295,8 +346,7 @@ suggestMediaBtn.addEventListener("click", async () => {
         sources: selectedSources(),
       }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not find media.");
+    const data = await readApiResponse(response);
     suggestResults.innerHTML = `<h2>Timestamp media examples</h2>
       <p class="muted">Showing media examples for ${data.scenes.length} scenes. For long videos, start with these first and search more scene-by-scene if needed.</p>
       ${data.scenes.map((scene) => `
