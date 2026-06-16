@@ -26,12 +26,12 @@ fs.mkdirSync(RENDER_DIR, { recursive: true });
 
 const upload = multer({
   dest: UPLOAD_DIR,
-  limits: { fileSize: 220 * 1024 * 1024 },
+  limits: { fileSize: 240 * 1024 * 1024 },
 });
 
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+app.use(express.json({ limit: "3mb" }));
+app.use(express.urlencoded({ extended: true, limit: "3mb" }));
 
 function authToken() {
   const password = process.env.APP_PASSWORD || "";
@@ -75,7 +75,7 @@ function loginPage(error = "") {
 <body>
   <form class="card" method="post" action="/login">
     <h1>Elias Media</h1>
-    <p>Enter your private login to access the video generator.</p>
+    <p>Enter your private login to access the studio.</p>
     <label>Username</label>
     <input name="username" autocomplete="username" required />
     <label>Password</label>
@@ -126,6 +126,10 @@ app.use("/renders", express.static(RENDER_DIR));
 
 const STOPWORDS = new Set("the a an and or but of to in on for with from by as is are was were be been being this that these those it its into about after before during while where when what why how do does did can could should would will just your you they them their has have had not no yes more most very really started through every across over under".split(" "));
 
+function safeText(value) {
+  return String(value || "").replace(/[^\w\s.,?!:$%&()'-]/g, "").replace(/\s+/g, " ").trim();
+}
+
 function slugify(value, fallback = "video") {
   return String(value || fallback)
     .toLowerCase()
@@ -134,12 +138,8 @@ function slugify(value, fallback = "video") {
     .slice(0, 80) || fallback;
 }
 
-function safeText(value) {
-  return String(value || "").replace(/[^\w\s.,?!:$%-]/g, "").replace(/\s+/g, " ").trim();
-}
-
 function secondsFromTimestamp(value = "") {
-  const clean = String(value).trim().replace(/^\[/, "").replace(/\]$/, "");
+  const clean = String(value).trim().replace(/^[[(]/, "").replace(/[\])]$/, "");
   const parts = clean.split(":").map(Number);
   if (parts.some((n) => Number.isNaN(n))) return null;
   if (parts.length === 2) return parts[0] * 60 + parts[1];
@@ -156,48 +156,7 @@ function formatTime(seconds) {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
-function parseTimestampedScript(script = "", audioDuration = 0, topic = "", niche = "documentary") {
-  const rows = String(script)
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const parsed = [];
-  for (const line of rows) {
-    const match = line.match(/^\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*(?:[-–—:|]\s*)?(.*)$/);
-    if (!match) continue;
-    const start = secondsFromTimestamp(match[1]);
-    const text = safeText(match[2] || "");
-    if (start === null || !text) continue;
-    parsed.push({ start, timestamp: formatTime(start), text });
-  }
-
-  parsed.sort((a, b) => a.start - b.start);
-
-  const scenes = parsed.map((item, index) => {
-    const nextStart = parsed[index + 1]?.start;
-    let end = typeof nextStart === "number" ? nextStart : (audioDuration || item.start + 8);
-    if (audioDuration && end > audioDuration) end = audioDuration;
-    let duration = Math.max(2, end - item.start);
-    if (duration > 22) duration = 22;
-    return {
-      scene: index + 1,
-      start: item.start,
-      end: item.start + duration,
-      duration,
-      timestamp: item.timestamp,
-      text: item.text,
-      query: buildSceneQuery(item.text, topic, niche),
-      callout: createCallout(item.text),
-      riskFlags: detectRiskFlags(item.text),
-      visualPlan: visualPlanForScene(item.text, niche),
-    };
-  });
-
-  return scenes.filter((s) => s.duration > 0.5);
-}
-
-function topKeywords(text = "", count = 6) {
+function topKeywords(text = "", count = 7) {
   const words = String(text)
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
@@ -210,7 +169,7 @@ function topKeywords(text = "", count = 6) {
 
 function nicheWords(niche = "") {
   return {
-    automotive: "cars trucks vehicle dealership mechanic engine highway",
+    automotive: "cars trucks vehicle dealership mechanic engine highway pickup",
     aviation: "aircraft airplane airport runway cockpit aviation",
     business: "business finance office economy company money charts",
     motivation: "cinematic lifestyle sunrise city walking success discipline",
@@ -227,8 +186,8 @@ function buildSceneQuery(text, topic, niche) {
 
 function detectRiskFlags(text = "") {
   const flags = [];
-  if (/\b(recall|lawsuit|investigation|regulator|government|nhtsa|faa|police|court|official)\b/i.test(text)) flags.push("Verify official source");
-  if (/(\$?\d[\d,.]*\s?(million|billion|thousand|%|percent|people|trucks|cars|planes|deaths|injuries)?)/i.test(text)) flags.push("Verify number");
+  if (/\b(recall|lawsuit|investigation|regulator|government|nhtsa|faa|police|court|official|data|cox|caredge)\b/i.test(text)) flags.push("Verify official/source claim");
+  if (/(\$?\d[\d,.]*\s?(million|billion|thousand|%|percent|people|trucks|cars|planes|deaths|injuries|days)?)/i.test(text)) flags.push("Verify number");
   if (/\b(killed|death|fatal|crash|accident|injured|unsafe|dangerous)\b/i.test(text)) flags.push("Use careful wording");
   if (/\b(bankrupt|fraud|criminal|illegal|corrupt|scam)\b/i.test(text)) flags.push("High-risk claim");
   return [...new Set(flags)];
@@ -242,7 +201,7 @@ function createCallout(text = "") {
   }
   const number = clean.match(/(\$?\d[\d,.]*\s?(million|billion|thousand|%|percent|trucks|cars|people|years|days|hours)?)/i);
   if (number && number[0].trim()) return `${number[0].toUpperCase()} MATTERS`;
-  if (/\b(problem|failure|recall|warning|mistake|truth|risk|damage|collapse|turning point|investigation|lawsuit|exposed|panic|decline|consequence)\b/i.test(clean)) {
+  if (/\b(problem|failure|recall|warning|mistake|truth|risk|damage|collapse|turning point|investigation|lawsuit|exposed|panic|decline|consequence|strategy|arrogant|greedy)\b/i.test(clean)) {
     return clean.split(" ").filter((w) => w.length > 2).slice(0, 5).join(" ").toUpperCase();
   }
   return "";
@@ -250,13 +209,55 @@ function createCallout(text = "") {
 
 function visualPlanForScene(text = "", niche = "documentary") {
   const lower = String(text).toLowerCase();
-  if (/\b(document|report|letter|email|claim|lawsuit|recall|headline|source)\b/.test(lower)) return "Document/headline shot with slow push-in";
-  if (/\b(number|cost|million|billion|percent|sales|loss|price|money)\b/.test(lower)) return "Chart, money, factory, or evidence visual";
-  if (niche === "automotive") return "Vehicle, dealership, mechanic, road, or engine detail";
+  if (/\b(document|report|letter|email|claim|lawsuit|recall|headline|source|data|cox|caredge)\b/.test(lower)) return "Document/headline/data visual with slow push-in";
+  if (/\b(number|cost|million|billion|percent|sales|loss|price|money|inventory|supply)\b/.test(lower)) return "Chart, dealership lot, price tag, or evidence visual";
+  if (/\b(buyer|customer|family|contractor|fleet|owner|dealer)\b/.test(lower)) return "People, dealership, customer decision, or showroom B-roll";
+  if (niche === "automotive") return "Vehicle, dealership, mechanic, road, pickup, or engine detail";
   if (niche === "aviation") return "Aircraft, cockpit, runway, radar, or airport detail";
   if (niche === "business") return "Office, company building, charts, workers, or market footage";
   if (niche === "architecture") return "Building exterior, interior, plan, construction, or design detail";
   return "Relevant documentary B-roll with clean movement";
+}
+
+function parseTimestampedScript(script = "", audioDuration = 0, topic = "", niche = "documentary") {
+  const rows = String(script)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const parsed = [];
+  for (const line of rows) {
+    const match = line.match(/^[\[(]?(\d{1,2}:\d{2}(?::\d{2})?)[\])]?\s*(?:[-–—:|]\s*)?(.*)$/);
+    if (!match) continue;
+    const start = secondsFromTimestamp(match[1]);
+    const text = safeText(match[2] || "");
+    if (start === null || !text) continue;
+    parsed.push({ start, timestamp: formatTime(start), text });
+  }
+
+  parsed.sort((a, b) => a.start - b.start);
+
+  const scenes = parsed.map((item, index) => {
+    const nextStart = parsed[index + 1]?.start;
+    let end = typeof nextStart === "number" ? nextStart : (audioDuration || item.start + 8);
+    if (audioDuration && end > audioDuration) end = audioDuration;
+    let duration = Math.max(2, end - item.start);
+    if (duration > 24) duration = 24;
+    return {
+      scene: index + 1,
+      start: item.start,
+      end: item.start + duration,
+      duration,
+      timestamp: item.timestamp,
+      text: item.text,
+      query: buildSceneQuery(item.text, topic, niche),
+      callout: createCallout(item.text),
+      riskFlags: detectRiskFlags(item.text),
+      visualPlan: visualPlanForScene(item.text, niche),
+    };
+  });
+
+  return scenes.filter((s) => s.duration > 0.5);
 }
 
 function dimensions(format) {
@@ -289,6 +290,10 @@ async function downloadFile(url, target) {
   return target;
 }
 
+function result(source, type, title, thumbnail, url, downloadUrl = "", meta = "") {
+  return { source, type, title: safeText(title).slice(0, 140) || source, thumbnail, url, downloadUrl, meta };
+}
+
 function bestPexelsFile(video) {
   const files = (video.video_files || [])
     .filter((f) => f.file_type === "video/mp4" && f.link)
@@ -300,84 +305,274 @@ function bestPexelsFile(video) {
   return files.find((f) => (f.width || 0) >= 1280) || files[0];
 }
 
-async function searchPexelsVideos(query, count) {
+async function searchPexelsVideos(query, count = 6) {
   const key = process.env.PEXELS_API_KEY;
   if (!key) return [];
-  const params = new URLSearchParams({ query, per_page: String(Math.min(count * 3, 30)), orientation: "landscape" });
-  const response = await fetch(`https://api.pexels.com/videos/search?${params}`, {
-    headers: { Authorization: key },
-  });
-  if (!response.ok) return [];
-  const data = await response.json();
-  return (data.videos || []).map((video) => {
-    const file = bestPexelsFile(video);
-    return file?.link ? {
-      url: file.link,
-      title: `Pexels video ${video.id}`,
-      sourcePage: video.url,
-      credit: `Pexels video ${video.id}`,
-    } : null;
-  }).filter(Boolean);
+  try {
+    const params = new URLSearchParams({ query, per_page: String(Math.min(count, 20)), orientation: "landscape" });
+    const response = await fetch(`https://api.pexels.com/videos/search?${params}`, { headers: { Authorization: key } });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.videos || []).map((video) => {
+      const file = bestPexelsFile(video);
+      return file?.link ? result("Pexels", "video", `Pexels video ${video.id}`, video.image, video.url, file.link, "Stock video") : null;
+    }).filter(Boolean);
+  } catch (_) {
+    return [];
+  }
 }
 
-async function searchPixabayVideos(query, count) {
+async function searchPexelsPhotos(query, count = 6) {
+  const key = process.env.PEXELS_API_KEY;
+  if (!key) return [];
+  try {
+    const params = new URLSearchParams({ query, per_page: String(Math.min(count, 20)), orientation: "landscape" });
+    const response = await fetch(`https://api.pexels.com/v1/search?${params}`, { headers: { Authorization: key } });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.photos || []).map((photo) => result("Pexels", "photo", photo.alt || `Pexels photo ${photo.id}`, photo.src?.medium || photo.src?.large, photo.url, photo.src?.original, "Stock photo"));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchPixabayVideos(query, count = 6) {
   const key = process.env.PIXABAY_API_KEY;
   if (!key) return [];
-  const params = new URLSearchParams({ key, q: query, per_page: String(Math.min(count * 3, 30)), safesearch: "true" });
-  const response = await fetch(`https://pixabay.com/api/videos/?${params}`);
-  if (!response.ok) return [];
-  const data = await response.json();
-  return (data.hits || []).map((item) => {
-    const video = item.videos?.large || item.videos?.medium || item.videos?.small;
-    return video?.url ? {
-      url: video.url,
-      title: item.tags || `Pixabay video ${item.id}`,
-      sourcePage: item.pageURL,
-      credit: `Pixabay video by ${item.user || "creator"}`,
-    } : null;
-  }).filter(Boolean);
+  try {
+    const params = new URLSearchParams({ key, q: query, per_page: String(Math.min(count, 20)), safesearch: "true" });
+    const response = await fetch(`https://pixabay.com/api/videos/?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.hits || []).map((item) => {
+      const video = item.videos?.large || item.videos?.medium || item.videos?.small;
+      return video?.url ? result("Pixabay", "video", item.tags || `Pixabay video ${item.id}`, item.picture_id ? `https://i.vimeocdn.com/video/${item.picture_id}_640x360.jpg` : "", item.pageURL, video.url, `By ${item.user || "creator"}`) : null;
+    }).filter(Boolean);
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchPixabayImages(query, count = 6) {
+  const key = process.env.PIXABAY_API_KEY;
+  if (!key) return [];
+  try {
+    const params = new URLSearchParams({ key, q: query, per_page: String(Math.min(count, 20)), safesearch: "true", image_type: "photo" });
+    const response = await fetch(`https://pixabay.com/api/?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.hits || []).map((item) => result("Pixabay", "photo", item.tags || `Pixabay image ${item.id}`, item.webformatURL, item.pageURL, item.largeImageURL, `By ${item.user || "creator"}`));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchUnsplash(query, count = 6) {
+  const key = process.env.UNSPLASH_ACCESS_KEY;
+  if (!key) return [];
+  try {
+    const params = new URLSearchParams({ query, per_page: String(Math.min(count, 20)), orientation: "landscape" });
+    const response = await fetch(`https://api.unsplash.com/search/photos?${params}`, { headers: { Authorization: `Client-ID ${key}` } });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.results || []).map((item) => result("Unsplash", "photo", item.alt_description || item.description || `Unsplash photo`, item.urls?.small, item.links?.html, item.urls?.raw, `By ${item.user?.name || "creator"}`));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchYouTube(query, count = 6) {
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key) return [];
+  try {
+    const params = new URLSearchParams({ key, q: query, part: "snippet", type: "video", maxResults: String(Math.min(count, 10)), safeSearch: "moderate" });
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.items || []).map((item) => result("YouTube", "reference", item.snippet?.title || "YouTube reference", item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url, `https://www.youtube.com/watch?v=${item.id?.videoId}`, "", "Reference only, not downloadable"));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchOpenverse(query, count = 6) {
+  try {
+    const params = new URLSearchParams({ q: query, page_size: String(Math.min(count, 20)) });
+    const response = await fetch(`https://api.openverse.engineering/v1/images/?${params}`, { headers: { "User-Agent": "EliasMedia/1.0" } });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.results || []).map((item) => result("Openverse", "photo", item.title || "Openverse image", item.thumbnail || item.url, item.foreign_landing_url || item.url, item.url, item.license ? `License: ${item.license}` : ""));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchNASA(query, count = 6) {
+  try {
+    const params = new URLSearchParams({ q: query, media_type: "image" });
+    const response = await fetch(`https://images-api.nasa.gov/search?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.collection?.items || []).slice(0, count).map((item) => {
+      const title = item.data?.[0]?.title || "NASA image";
+      const thumb = item.links?.[0]?.href || "";
+      const nasaId = item.data?.[0]?.nasa_id || "";
+      return result("NASA", "photo", title, thumb, item.href || `https://images.nasa.gov/details/${nasaId}`, thumb, "NASA image library");
+    });
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchWikimedia(query, count = 6) {
+  try {
+    const params = new URLSearchParams({
+      action: "query",
+      format: "json",
+      generator: "search",
+      gsrsearch: query,
+      gsrnamespace: "6",
+      gsrlimit: String(Math.min(count, 15)),
+      prop: "imageinfo",
+      iiprop: "url|mime|extmetadata",
+      origin: "*",
+    });
+    const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Object.values(data.query?.pages || {}).map((page) => {
+      const info = page.imageinfo?.[0] || {};
+      const title = String(page.title || "Wikimedia media").replace(/^File:/, "");
+      return result("Wikimedia", info.mime?.includes("video") ? "video" : "photo", title, info.thumburl || info.url, info.descriptionurl || info.url, info.url, info.extmetadata?.LicenseShortName?.value || "Commons");
+    });
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchArchive(query, count = 6) {
+  try {
+    const params = new URLSearchParams({
+      q: `${query} AND mediatype:(movies OR image)`,
+      fl: "identifier,title,mediatype",
+      rows: String(Math.min(count, 20)),
+      page: "1",
+      output: "json",
+    });
+    const response = await fetch(`https://archive.org/advancedsearch.php?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.response?.docs || []).map((item) => result("Internet Archive", item.mediatype === "movies" ? "video" : "photo", item.title || item.identifier, `https://archive.org/services/img/${item.identifier}`, `https://archive.org/details/${item.identifier}`, "", item.mediatype || "archive"));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchFlickr(query, count = 6) {
+  const key = process.env.FLICKR_API_KEY;
+  if (!key) return [];
+  try {
+    const params = new URLSearchParams({
+      method: "flickr.photos.search",
+      api_key: key,
+      text: query,
+      safe_search: "1",
+      content_type: "1",
+      media: "photos",
+      per_page: String(Math.min(count, 20)),
+      format: "json",
+      nojsoncallback: "1",
+      extras: "url_m,url_l,owner_name,license",
+    });
+    const response = await fetch(`https://www.flickr.com/services/rest/?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.photos?.photo || []).map((item) => result("Flickr", "photo", item.title || "Flickr photo", item.url_m || item.url_l, `https://www.flickr.com/photos/${item.owner}/${item.id}`, item.url_l || item.url_m, item.ownername ? `By ${item.ownername}` : ""));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchGiphy(query, count = 6) {
+  const key = process.env.GIPHY_API_KEY;
+  if (!key) return [];
+  try {
+    const params = new URLSearchParams({ api_key: key, q: query, limit: String(Math.min(count, 20)), rating: "pg" });
+    const response = await fetch(`https://api.giphy.com/v1/gifs/search?${params}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.data || []).map((item) => result("GIPHY", "gif", item.title || "GIPHY result", item.images?.fixed_width?.webp || item.images?.fixed_width?.url, item.url, item.images?.original?.mp4 || item.images?.original?.url, "GIF/animation"));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function searchAllSources(query, count = 6, allowedSources = []) {
+  const allow = new Set(allowedSources?.length ? allowedSources : ["pexels", "pixabay", "youtube", "unsplash", "openverse", "nasa", "wikimedia", "archive", "flickr", "giphy"]);
+  const tasks = [];
+  if (allow.has("pexels")) tasks.push(searchPexelsVideos(query, count), searchPexelsPhotos(query, count));
+  if (allow.has("pixabay")) tasks.push(searchPixabayVideos(query, count), searchPixabayImages(query, count));
+  if (allow.has("youtube")) tasks.push(searchYouTube(query, count));
+  if (allow.has("unsplash")) tasks.push(searchUnsplash(query, count));
+  if (allow.has("openverse")) tasks.push(searchOpenverse(query, count));
+  if (allow.has("nasa")) tasks.push(searchNASA(query, count));
+  if (allow.has("wikimedia")) tasks.push(searchWikimedia(query, count));
+  if (allow.has("archive")) tasks.push(searchArchive(query, count));
+  if (allow.has("flickr")) tasks.push(searchFlickr(query, count));
+  if (allow.has("giphy")) tasks.push(searchGiphy(query, count));
+
+  const settled = await Promise.allSettled(tasks);
+  const flat = settled.flatMap((item) => item.status === "fulfilled" ? item.value : []);
+  const seen = new Set();
+  const filtered = flat.filter((item) => {
+    const key = item.url || item.downloadUrl || item.thumbnail || item.title;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const groups = {};
+  for (const item of filtered) {
+    groups[item.source] ||= [];
+    groups[item.source].push(item);
+  }
+  return { results: filtered, groups };
 }
 
 const usedMediaUrls = new Set();
 
 async function getBestStockForScene(scene, niche) {
-  const [pexels, pixabay] = await Promise.all([
-    searchPexelsVideos(scene.query, 4),
-    searchPixabayVideos(scene.query, 4),
-  ]);
-  const all = [...pexels, ...pixabay].filter((item) => item && item.url && !usedMediaUrls.has(item.url));
+  const [pexels, pixabay] = await Promise.all([searchPexelsVideos(scene.query, 5), searchPixabayVideos(scene.query, 5)]);
+  const all = [...pexels, ...pixabay].filter((item) => item && item.downloadUrl && !usedMediaUrls.has(item.downloadUrl));
   const chosen = all[0] || [...pexels, ...pixabay][0] || null;
-  if (chosen?.url) usedMediaUrls.add(chosen.url);
+  if (chosen?.downloadUrl) usedMediaUrls.add(chosen.downloadUrl);
   return chosen;
 }
 
 function fallbackColorVideoArgs(duration, dims, text, outPath) {
-  const draw = safeText(text).slice(0, 42).toUpperCase() || "ELIAS MEDIA";
   return [
     "-y",
     "-f", "lavfi",
     "-i", `color=c=0x08111f:s=${dims.width}x${dims.height}:d=${duration}`,
-    "-vf", `drawtext=text='${draw.replace(/:/g, "\\:").replace(/'/g, "\\'")}':fontcolor=white:fontsize=${Math.round(dims.width / 20)}:x=(w-text_w)/2:y=(h-text_h)/2`,
+    "-vf", "fade=t=in:st=0:d=0.12,fade=t=out:st=" + Math.max(0, duration - 0.16).toFixed(2) + ":d=0.16",
     "-r", "30",
     "-c:v", "libx264",
+    "-preset", "veryfast",
     "-pix_fmt", "yuv420p",
     outPath,
   ];
 }
 
 function makePartArgs(inputPath, duration, dims, text, photoMotion, outPath) {
-  const callout = safeText(text).slice(0, 50).toUpperCase();
+  // No FFmpeg drawtext: Render's ffmpeg-static build may not include it.
   const scaleCrop = `scale=${dims.width}:${dims.height}:force_original_aspect_ratio=increase,crop=${dims.width}:${dims.height},setsar=1`;
   const fade = `,fade=t=in:st=0:d=0.12,fade=t=out:st=${Math.max(0, duration - 0.16).toFixed(2)}:d=0.16`;
-  const textFilter = callout
-    ? `,drawbox=x=0:y=ih-220:w=iw:h=160:color=black@0.34:t=fill,drawtext=text='${callout.replace(/:/g, "\\:").replace(/'/g, "\\'")}':fontcolor=white:fontsize=${Math.round(dims.width / 31)}:x=80:y=h-170`
-    : "";
   return [
     "-y",
     "-stream_loop", "-1",
     "-i", inputPath,
     "-t", String(duration),
-    "-vf", `${scaleCrop}${fade}${textFilter}`,
+    "-vf", `${scaleCrop}${fade}`,
     "-an",
     "-r", "30",
     "-c:v", "libx264",
@@ -397,7 +592,7 @@ async function renderVideo({ audioPath, musicPath, topic, niche, format, script,
   const audioDuration = Math.max(8, Math.min(await mediaDuration(audioPath), 1200));
   const dims = dimensions(format);
   const scenes = parseTimestampedScript(script, audioDuration, topic, niche);
-  if (!scenes.length) throw new Error("No valid timestamps found. Use lines like 00:00 Your sentence here.");
+  if (!scenes.length) throw new Error("No valid timestamps found. Use lines like 00:00 Your sentence here or (0:00) Your sentence here.");
 
   const parts = [];
   const sourceReport = [];
@@ -410,16 +605,16 @@ async function renderVideo({ audioPath, musicPath, topic, niche, format, script,
     if (chosen) {
       const mediaPath = path.join(workDir, `stock-${String(i).padStart(3, "0")}.mp4`);
       try {
-        await downloadFile(chosen.url, mediaPath);
+        await downloadFile(chosen.downloadUrl || chosen.url, mediaPath);
         await execFileAsync(ffmpegPath, makePartArgs(mediaPath, scene.duration, dims, scene.callout, photoMotion, partPath), { timeout: 120000 });
-        sourceReport.push(`Scene ${scene.scene} ${scene.timestamp}: ${chosen.credit}\nSource: ${chosen.sourcePage}\nVisual plan: ${scene.visualPlan}\nLine: ${scene.text}\nRisk: ${(scene.riskFlags || []).join(", ") || "None"}\n`);
+        sourceReport.push(`Scene ${scene.scene} ${scene.timestamp}: ${chosen.source} - ${chosen.title}\nSource: ${chosen.url}\nVisual plan: ${scene.visualPlan}\nLine: ${scene.text}\nText callout: ${scene.callout || "None"}\nRisk: ${(scene.riskFlags || []).join(", ") || "None"}\n`);
       } catch (error) {
         await execFileAsync(ffmpegPath, fallbackColorVideoArgs(scene.duration, dims, scene.callout || scene.visualPlan || topic, partPath), { timeout: 60000 });
-        sourceReport.push(`Scene ${scene.scene} ${scene.timestamp}: fallback generated visual\nVisual plan: ${scene.visualPlan}\nLine: ${scene.text}\nRisk: ${(scene.riskFlags || []).join(", ") || "None"}\n`);
+        sourceReport.push(`Scene ${scene.scene} ${scene.timestamp}: fallback generated visual\nVisual plan: ${scene.visualPlan}\nLine: ${scene.text}\nText callout: ${scene.callout || "None"}\nRisk: ${(scene.riskFlags || []).join(", ") || "None"}\n`);
       }
     } else {
       await execFileAsync(ffmpegPath, fallbackColorVideoArgs(scene.duration, dims, scene.callout || scene.visualPlan || topic, partPath), { timeout: 60000 });
-      sourceReport.push(`Scene ${scene.scene} ${scene.timestamp}: fallback generated visual\nVisual plan: ${scene.visualPlan}\nLine: ${scene.text}\nRisk: ${(scene.riskFlags || []).join(", ") || "None"}\n`);
+      sourceReport.push(`Scene ${scene.scene} ${scene.timestamp}: fallback generated visual\nVisual plan: ${scene.visualPlan}\nLine: ${scene.text}\nText callout: ${scene.callout || "None"}\nRisk: ${(scene.riskFlags || []).join(", ") || "None"}\n`);
     }
 
     parts.push(partPath);
@@ -429,35 +624,21 @@ async function renderVideo({ audioPath, musicPath, topic, niche, format, script,
   fs.writeFileSync(listPath, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
 
   const silentVideo = path.join(workDir, "video-only.mp4");
-  await execFileAsync(ffmpegPath, [
-    "-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", silentVideo,
-  ], { timeout: 180000 });
+  await execFileAsync(ffmpegPath, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", silentVideo], { timeout: 180000 });
 
   const outputName = `${slugify(topic || "timestamped-video")}-${id}.mp4`;
   const outputPath = path.join(RENDER_DIR, outputName);
 
   if (useMusic === "true" && musicPath) {
     await execFileAsync(ffmpegPath, [
-      "-y",
-      "-i", silentVideo,
-      "-i", audioPath,
-      "-stream_loop", "-1",
-      "-i", musicPath,
-      "-filter_complex",
-      `[2:a]volume=0.10,atrim=0:${audioDuration}[m];[1:a]volume=1.0[v];[v][m]amix=inputs=2:duration=first:dropout_transition=2[a]`,
-      "-map", "0:v", "-map", "[a]",
-      "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-      outputPath,
-    ], { timeout: 220000 });
+      "-y", "-i", silentVideo, "-i", audioPath, "-stream_loop", "-1", "-i", musicPath,
+      "-filter_complex", `[2:a]volume=0.10,atrim=0:${audioDuration}[m];[1:a]volume=1.0[v];[v][m]amix=inputs=2:duration=first:dropout_transition=2[a]`,
+      "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", outputPath,
+    ], { timeout: 240000 });
   } else {
     await execFileAsync(ffmpegPath, [
-      "-y",
-      "-i", silentVideo,
-      "-i", audioPath,
-      "-map", "0:v", "-map", "1:a",
-      "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-      outputPath,
-    ], { timeout: 220000 });
+      "-y", "-i", silentVideo, "-i", audioPath, "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", outputPath,
+    ], { timeout: 240000 });
   }
 
   const reportName = outputName.replace(".mp4", "-source-report.txt");
@@ -475,13 +656,44 @@ app.post("/api/parse-script", async (req, res) => {
   try {
     const { script = "", topic = "", niche = "documentary", audioDuration = 0 } = req.body || {};
     const scenes = parseTimestampedScript(script, Number(audioDuration) || 0, topic, niche);
-    if (!scenes.length) return res.status(400).json({ error: "No valid timestamps found. Use lines like 00:00 Your sentence here." });
-    res.json({
-      scenes,
-      riskFlags: [...new Set(scenes.flatMap((s) => s.riskFlags || []))],
-    });
+    if (!scenes.length) return res.status(400).json({ error: "No valid timestamps found. Use lines like 00:00 Your sentence here or (0:00) Your sentence here." });
+    res.json({ scenes, riskFlags: [...new Set(scenes.flatMap((s) => s.riskFlags || []))] });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not parse script." });
+  }
+});
+
+app.post("/api/search-media", async (req, res) => {
+  try {
+    const { query = "", niche = "documentary", sources = [], count = 6 } = req.body || {};
+    const cleanQuery = safeText(query);
+    if (!cleanQuery) return res.status(400).json({ error: "Enter something to search." });
+    const finalQuery = `${cleanQuery} ${nicheWords(niche)}`.trim();
+    const data = await searchAllSources(finalQuery, Number(count) || 6, sources);
+    res.json({ query: cleanQuery, ...data });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Media search failed." });
+  }
+});
+
+app.post("/api/suggest-media", async (req, res) => {
+  try {
+    const { script = "", topic = "", niche = "documentary", maxScenes = 25, sources = [] } = req.body || {};
+    const scenes = parseTimestampedScript(script, 0, topic, niche).slice(0, Math.min(Number(maxScenes) || 25, 40));
+    if (!scenes.length) return res.status(400).json({ error: "No valid timestamps found." });
+
+    const output = [];
+    for (const scene of scenes) {
+      const data = await searchAllSources(scene.query, 3, sources);
+      output.push({
+        ...scene,
+        media: data.results.slice(0, 12),
+        groups: data.groups,
+      });
+    }
+    res.json({ scenes: output, limitedTo: scenes.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Media suggestion failed." });
   }
 });
 
@@ -524,5 +736,5 @@ app.post(
 );
 
 app.listen(PORT, () => {
-  console.log(`Elias Media Timestamped Video Generator running on http://localhost:${PORT}`);
+  console.log(`Elias Media Studio running on http://localhost:${PORT}`);
 });

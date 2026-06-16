@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Elias Media</title>
+  <title>Elias Media Studio</title>
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -14,53 +14,143 @@
       <div class="brand">
         <div class="brand-mark">EM</div>
         <div>
-          <strong>Elias Media</strong>
-          <span>Timestamped script video generator</span>
+          <strong>Elias Media Studio</strong>
+          <span>Video generator + media finder + timestamp suggestions</span>
         </div>
       </div>
       <div class="top-actions">
         <span class="pill">No Canva</span>
+        <span class="pill">No search terms shown</span>
         <span class="pill">No captions</span>
-        <span class="pill">Voiceover first</span>
         <a class="pill logout" href="/logout">Logout</a>
       </div>
     </nav>
 
     <section class="hero">
-      <p class="eyebrow">Free accurate workflow</p>
-      <h1>Upload your voiceover and paste your timestamped script. The tool builds the draft video.</h1>
-      <p>No search terms are shown. No Canva. No full captions. The script timestamps control the visuals, and the audio controls the final video.</p>
+      <p class="eyebrow">All-in-one workflow</p>
+      <h1>Generate videos, search media, and get timestamp media suggestions in one tool.</h1>
+      <p>Use the video builder for finished drafts. Use media search when you want results from different sites. Use timestamp suggestions when you want the tool to recommend the kind of media for each timestamp.</p>
     </section>
 
-    <section class="notice">
-      <strong>Best format:</strong> Paste each line like <code>00:00 Your sentence here</code>. The next timestamp controls when the scene changes.
+    <div class="tabs">
+      <button class="tab active" data-tab="build">Build video</button>
+      <button class="tab" data-tab="search">Search media</button>
+      <button class="tab" data-tab="suggest">Timestamp suggestions</button>
+    </div>
+
+    <section id="build" class="tab-panel active">
+      <section class="notice">
+        <strong>Best format:</strong> Paste each line like <code>00:00 Your sentence here</code> or <code>(0:00) Your sentence here</code>.
+      </section>
+
+      <section class="builder-card">
+        <h2>Build video from timestamped script</h2>
+        <form id="builderForm">
+          <div class="grid">
+            <label>
+              Voiceover audio
+              <input id="voiceover" name="voiceover" type="file" accept="audio/*" required />
+              <small>Upload the finished MP3/WAV voiceover.</small>
+            </label>
+
+            <label>
+              Background music (optional)
+              <input id="music" name="music" type="file" accept="audio/*" />
+              <small>If uploaded, music is mixed quietly under the voice.</small>
+            </label>
+
+            <label>
+              Topic / video direction
+              <input id="topic" name="topic" type="text" placeholder="Example: Trucks nobody wants in 2026" />
+              <small>This improves stock clip accuracy.</small>
+            </label>
+
+            <label>
+              Niche
+              <select id="niche" name="niche">
+                <option value="documentary">Documentary / News</option>
+                <option value="automotive">Cars / Trucks</option>
+                <option value="aviation">Aviation</option>
+                <option value="business">Business / Finance</option>
+                <option value="motivation">Motivation</option>
+                <option value="architecture">Architecture</option>
+                <option value="music">Music / Performance</option>
+              </select>
+            </label>
+
+            <label>
+              Format
+              <select id="format" name="format">
+                <option value="landscape">Landscape 16:9</option>
+                <option value="portrait">Vertical 9:16</option>
+                <option value="square">Square 1:1</option>
+              </select>
+            </label>
+
+            <label>
+              Clip movement
+              <select id="photoMotion" name="photoMotion">
+                <option value="slow-zoom">Clean slow movement</option>
+                <option value="none">No movement</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="full">
+            Timestamped script
+            <textarea id="script" name="script" rows="12" placeholder="00:00 By May 2026, the U.S. new vehicle market was carrying almost 2.9 million units of inventory.
+00:07 There were 76 days of supply, and average listing prices were above $49,000.
+00:13 Incentives were increasing, but the real story was not the overall market."></textarea>
+            <small>The timestamps control the visuals. No full captions are added.</small>
+          </label>
+
+          <div class="checks">
+            <label><input id="useMusic" name="useMusic" type="checkbox" checked /> Use background music if uploaded</label>
+            <label><input type="checkbox" checked disabled /> No full captions/subtitles</label>
+            <label><input type="checkbox" checked disabled /> Clean invisible transitions</label>
+          </div>
+
+          <div class="actions">
+            <button id="previewBtn" type="button">1. Preview scene plan</button>
+            <button id="buildBtn" type="submit">2. Build video draft</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="scenePlanCard" class="builder-card hidden">
+        <h2>Scene plan</h2>
+        <p id="sceneSummary"></p>
+        <div id="sceneList"></div>
+      </section>
+
+      <section id="progressCard" class="builder-card hidden">
+        <h2>Build progress</h2>
+        <div id="progressText">Waiting...</div>
+        <div class="progress"><div id="progressBar"></div></div>
+      </section>
+
+      <section id="resultCard" class="builder-card hidden">
+        <h2>Your video is ready</h2>
+        <p id="resultMeta"></p>
+        <div class="actions">
+          <a id="downloadVideo" class="button-link" href="#" download>Download MP4</a>
+          <a id="downloadReport" class="button-link ghost" href="#" download>Download source report</a>
+        </div>
+      </section>
     </section>
 
-    <section class="builder-card">
-      <h2>Build video from timestamped script</h2>
-      <form id="builderForm">
+    <section id="search" class="tab-panel">
+      <section class="builder-card">
+        <h2>Search media from different sites</h2>
+        <p class="muted">Search anything and get results from the media sources we added. Canva and search-term generation are removed.</p>
         <div class="grid">
           <label>
-            Voiceover audio
-            <input id="voiceover" name="voiceover" type="file" accept="audio/*" required />
-            <small>Upload the finished MP3/WAV voiceover.</small>
+            Search
+            <input id="mediaQuery" type="text" placeholder="Example: pickup trucks sitting on dealership lot" />
           </label>
-
-          <label>
-            Background music (optional)
-            <input id="music" name="music" type="file" accept="audio/*" />
-            <small>If uploaded, music is mixed quietly under the voice.</small>
-          </label>
-
-          <label>
-            Topic / video direction
-            <input id="topic" name="topic" type="text" placeholder="Example: Toyota Tundra recall documentary" />
-            <small>This improves stock clip accuracy.</small>
-          </label>
-
           <label>
             Niche
-            <select id="niche" name="niche">
+            <select id="mediaNiche">
               <option value="documentary">Documentary / News</option>
               <option value="automotive">Cars / Trucks</option>
               <option value="aviation">Aviation</option>
@@ -70,78 +160,47 @@
               <option value="music">Music / Performance</option>
             </select>
           </label>
+        </div>
+        <div class="source-grid" id="sourceGrid"></div>
+        <button id="mediaSearchBtn" type="button">Search all selected sources</button>
+      </section>
+      <section id="mediaResults" class="builder-card hidden"></section>
+    </section>
 
+    <section id="suggest" class="tab-panel">
+      <section class="builder-card">
+        <h2>Timestamp media suggestions</h2>
+        <p class="muted">Paste timestamped text. The tool will suggest the kind of media to use for each timestamp and can pull example results from all selected sources.</p>
+        <div class="grid">
           <label>
-            Format
-            <select id="format" name="format">
-              <option value="landscape">Landscape 16:9</option>
-              <option value="portrait">Vertical 9:16</option>
-              <option value="square">Square 1:1</option>
-            </select>
+            Topic / video direction
+            <input id="suggestTopic" type="text" placeholder="Example: slow-selling trucks in 2026" />
           </label>
-
           <label>
-            Clip movement
-            <select id="photoMotion" name="photoMotion">
-              <option value="slow-zoom">Clean slow movement</option>
-              <option value="none">No movement</option>
+            Niche
+            <select id="suggestNiche">
+              <option value="automotive">Cars / Trucks</option>
+              <option value="documentary">Documentary / News</option>
+              <option value="aviation">Aviation</option>
+              <option value="business">Business / Finance</option>
+              <option value="motivation">Motivation</option>
+              <option value="architecture">Architecture</option>
+              <option value="music">Music / Performance</option>
             </select>
           </label>
         </div>
-
         <label class="full">
-          Timestamped script
-          <textarea id="script" name="script" rows="12" placeholder="00:00 Toyota thought it had built one of the toughest trucks in America.
-00:07 But then owners started reporting serious engine problems.
-00:15 The question is, how did this happen?
-00:23 The problem started much earlier than most people realised."></textarea>
-          <small>The tool uses this to time visuals and add important text only where needed.</small>
+          Timestamped text
+          <textarea id="suggestScript" rows="12" placeholder="00:00 By May 2026, the U.S. new vehicle market was carrying almost 2.9 million units of inventory.
+00:07 There were 76 days of supply, and average listing prices were above $49,000."></textarea>
         </label>
-
-        <div class="checks">
-          <label><input id="useMusic" name="useMusic" type="checkbox" checked /> Use background music if uploaded</label>
-          <label><input id="noCaptions" type="checkbox" checked disabled /> No full captions/subtitles</label>
-          <label><input id="subtleTransitions" type="checkbox" checked disabled /> Clean invisible transitions</label>
-        </div>
-
         <div class="actions">
-          <button id="previewBtn" type="button">1. Preview scene plan</button>
-          <button id="buildBtn" type="submit">2. Build video draft</button>
+          <button id="suggestPlanBtn" type="button">Preview suggestions only</button>
+          <button id="suggestMediaBtn" type="button">Find media examples</button>
         </div>
-      </form>
-    </section>
-
-    <section id="scenePlanCard" class="builder-card hidden">
-      <h2>Scene plan</h2>
-      <p id="sceneSummary"></p>
-      <div id="sceneList"></div>
-    </section>
-
-    <section id="progressCard" class="builder-card hidden">
-      <h2>Build progress</h2>
-      <div id="progressText">Waiting...</div>
-      <div class="progress"><div id="progressBar"></div></div>
-    </section>
-
-    <section id="resultCard" class="builder-card hidden">
-      <h2>Your video is ready</h2>
-      <p id="resultMeta"></p>
-      <div class="actions">
-        <a id="downloadVideo" class="button-link" href="#" download>Download MP4</a>
-        <a id="downloadReport" class="button-link ghost" href="#" download>Download source report</a>
-      </div>
-    </section>
-
-    <section class="builder-card">
-      <h2>Quality rules built in</h2>
-      <ul class="feature-list">
-        <li>Timestamped script controls scene timing.</li>
-        <li>Voiceover stays as the main audio.</li>
-        <li>No full captions are added.</li>
-        <li>Important text callouts only appear for questions, numbers, warnings, and major points.</li>
-        <li>Clean transitions only: straight cuts and subtle fades.</li>
-        <li>Source report is exported for review.</li>
-      </ul>
+        <small>For long scripts, media examples are limited to the first scenes so Render does not timeout.</small>
+      </section>
+      <section id="suggestResults" class="builder-card hidden"></section>
     </section>
   </main>
 

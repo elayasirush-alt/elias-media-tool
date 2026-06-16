@@ -1,7 +1,7 @@
 {
-  "name": "elias-media-timestamped-audio-video-generator",
+  "name": "elias-media-studio-video-and-media-search",
   "version": "1.0.0",
-  "description": "Generate draft videos from timestamped scripts and voiceover audio using stock media and FFmpeg.",
+  "description": "Combined timestamped audio video generator, media search, and timestamp media suggestion tool.",
   "type": "module",
   "main": "server.js",
   "scripts": {

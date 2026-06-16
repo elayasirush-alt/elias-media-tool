@@ -1,49 +1,45 @@
-# Elias Media Timestamped Script + Audio Video Generator
+# Elias Media Studio: Video Generator + Media Search + Timestamp Suggestions
 
-This version is built for the free, accurate workflow.
+This version combines the two workflows the user requested:
 
-## Workflow
+1. Build a video from uploaded voiceover + timestamped script.
+2. Search anything and get media results from different sources.
+3. Paste timestamped text and get suggested media types/results for each timestamp.
 
-1. Upload voiceover MP3/WAV.
-2. Paste timestamped script.
-3. Click Preview scene plan.
-4. Click Build video draft.
-5. Download MP4 and source report.
+## Removed
 
-## Timestamp format
+- Canva
+- Visible search-term generator
+- Full captions/subtitles
+- OpenAI/transcription requirement
 
-Use one sentence per line:
+## Sources supported
 
-00:00 Toyota thought it had built one of the toughest trucks in America.
-00:07 But then owners started reporting serious engine problems.
-00:15 The question is, how did this happen?
-
-## What this version removes
-
-- No Canva section.
-- No visible search terms.
-- No normal captions/subtitles.
-- No transcription API required.
-
-## What this version does
-
-- Reads your timestamps.
-- Uses each timestamped script line as a scene.
-- Uses the next timestamp to calculate scene length.
-- Selects stock clips from Pexels and Pixabay.
-- Adds important text callouts only when needed.
-- Mixes voiceover as main audio.
-- Adds optional background music quietly.
-- Exports MP4.
-- Exports a source report.
+- Pexels
+- Pixabay
+- YouTube reference only
+- Unsplash
+- Openverse
+- NASA Image Library
+- Wikimedia Commons
+- Internet Archive
+- Flickr
+- GIPHY
 
 ## Environment variables
 
 PEXELS_API_KEY=
 PIXABAY_API_KEY=
+UNSPLASH_ACCESS_KEY=
+YOUTUBE_API_KEY=
+FLICKR_API_KEY=
+GIPHY_API_KEY=
 APP_USERNAME=admin
 APP_PASSWORD=
 
-## Render note
+## Notes
 
-Rendering video uses CPU. Test with 30 seconds to 1 minute first, then longer videos.
+- Video rendering uses Pexels/Pixabay video clips because those are easiest to render reliably.
+- Search and timestamp suggestions can show results from all supported sources.
+- YouTube is reference only and not downloadable.
+- Important text callouts are saved in the scene/source report. They are not burned into MP4 because Render's ffmpeg-static build may not include drawtext.
