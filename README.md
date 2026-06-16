@@ -105,3 +105,13 @@ Sound effects are also added like media:
 - Each timestamp gets SFX search links.
 - Each timestamp gets timing and volume guidance.
 - SFX source links are included in the report.
+
+
+## Browser tab icon restored
+
+This version includes:
+- public/favicon.png
+- public/favicon.ico
+- favicon links in public/index.html
+
+After deployment, hard-refresh the website or clear browser cache if the old/default icon still appears.
