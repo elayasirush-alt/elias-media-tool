@@ -130,7 +130,14 @@ function isAllowedDownloadHost(url) {
     host.endsWith(".pixabay.com") ||
     host === "images.unsplash.com" ||
     host === "plus.unsplash.com" ||
-    host === "api.unsplash.com"
+    host === "api.unsplash.com" ||
+    host.endsWith("openverse.org") ||
+    host.endsWith("wikimedia.org") ||
+    host.endsWith("staticflickr.com") ||
+    host.endsWith("giphy.com") ||
+    host.endsWith("media.giphy.com") ||
+    host.endsWith("archive.org") ||
+    host.endsWith("nasa.gov")
   );
 }
 
@@ -200,6 +207,12 @@ const POLICIES = {
   CANVA: "Canva manual search",
   ARCHIVE: "Archive rights vary",
   UNSPLASH: "Unsplash photo license",
+  OPENVERSE: "Open license check",
+  NASA: "NASA usage guidelines",
+  COMMONS: "Commons license check",
+  ARCHIVE: "Archive rights vary",
+  FLICKR: "Flickr license check",
+  GIPHY: "GIPHY API media",
 };
 
 function e(query) {
@@ -443,6 +456,46 @@ function bestPexelsFile(files = [], orientation = "any") {
   return candidates.sort((a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0))[0];
 }
 
+
+function normalizeResultKey(item) {
+  return String(item?.sourcePage || item?.directUrl || item?.thumbnail || item?.title || "")
+    .toLowerCase()
+    .replace(/[?#].*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function uniqueResults(results = [], limit = 3) {
+  const seen = new Set();
+  const output = [];
+  for (const item of results) {
+    const key = normalizeResultKey(item);
+    const titleKey = String(item?.title || "").toLowerCase().trim();
+    const thumbKey = String(item?.thumbnail || "").replace(/[?#].*$/, "");
+    const combined = key || titleKey || thumbKey;
+    if (!combined || seen.has(combined) || seen.has(titleKey) || seen.has(thumbKey)) continue;
+    seen.add(combined);
+    if (titleKey) seen.add(titleKey);
+    if (thumbKey) seen.add(thumbKey);
+    output.push(item);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+function withUniqueResults(sourceBlock, limit = 3) {
+  return { ...sourceBlock, results: uniqueResults(sourceBlock?.results || [], limit) };
+}
+function directFileFromArchive(identifier, files = []) {
+  const preferred = files.find((file) => /\.(mp4|mov|m4v|webm)$/i.test(file.name || ""));
+  if (!preferred) return "";
+  return `https://archive.org/download/${identifier}/${encodeURIComponent(preferred.name)}`;
+}
+function commonsImageUrl(title, width = 420) {
+  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(String(title || "").replace(/^File:/i, ""))}?width=${width}`;
+}
+function commonsFilePage(title) {
+  return `https://commons.wikimedia.org/wiki/${encodeURIComponent(String(title || "").replaceAll(" ", "_"))}`;
+}
+
 async function searchPexels({ query, orientation, perPage }) {
   const key = process.env.PEXELS_API_KEY;
   if (!key) return { source: "Pexels", error: "Missing PEXELS_API_KEY in .env", results: [] };
@@ -551,6 +604,198 @@ async function searchUnsplash({ query, orientation, perPage }) {
     return { source: "Unsplash Photos", error: null, results };
   } catch (error) {
     return { source: "Unsplash Photos", error: error.message, results: [] };
+  }
+}
+
+
+async function searchOpenverse({ query, perPage }) {
+  try {
+    const params = new URLSearchParams({ q: query, page_size: String(Math.min(perPage, 6)), mature: "false" });
+    const response = await fetch(`https://api.openverse.engineering/v1/images/?${params}`, { headers: { "User-Agent": "EliasMedia/1.0" } });
+    if (!response.ok) return { source: "Openverse Images", error: `Openverse error ${response.status}`, results: [] };
+    const data = await response.json();
+    const results = (data.results || []).map((item) => ({
+      id: `openverse-${item.id}`,
+      source: "Openverse Images",
+      policy: POLICIES.OPENVERSE,
+      title: item.title || "Openverse image",
+      creator: item.creator || item.provider || "Unknown creator",
+      sourcePage: item.foreign_landing_url || item.url || "https://openverse.org/",
+      duration: "Photo",
+      width: item.width || 0,
+      height: item.height || 0,
+      thumbnail: item.thumbnail || item.url || "",
+      directUrl: item.url || "",
+      actionLabel: "Open image",
+      attribution: item.attribution || `${item.title || "Image"} by ${item.creator || "Unknown"} via Openverse`,
+    }));
+    return { source: "Openverse Images", error: null, results: uniqueResults(results, perPage) };
+  } catch (error) {
+    return { source: "Openverse Images", error: error.message, results: [] };
+  }
+}
+async function searchNasaLibrary({ query, perPage }) {
+  try {
+    const params = new URLSearchParams({ q: query, media_type: "image,video" });
+    const response = await fetch(`https://images-api.nasa.gov/search?${params}`);
+    if (!response.ok) return { source: "NASA Library", error: `NASA error ${response.status}`, results: [] };
+    const data = await response.json();
+    const items = data.collection?.items || [];
+    const results = items.map((item, index) => {
+      const meta = item.data?.[0] || {};
+      const link = (item.links || []).find((l) => l.href)?.href || "";
+      return {
+        id: `nasa-${meta.nasa_id || index}`,
+        source: "NASA Library",
+        policy: POLICIES.NASA,
+        title: meta.title || "NASA media",
+        creator: meta.center || "NASA",
+        sourcePage: item.href || "https://images.nasa.gov/",
+        duration: meta.media_type === "video" ? "Video" : "Photo",
+        width: 0,
+        height: 0,
+        thumbnail: link,
+        directUrl: link,
+        actionLabel: "Open media",
+        attribution: `NASA: ${meta.title || "media"}`,
+      };
+    });
+    return { source: "NASA Library", error: null, results: uniqueResults(results, perPage) };
+  } catch (error) {
+    return { source: "NASA Library", error: error.message, results: [] };
+  }
+}
+async function searchWikimedia({ query, perPage }) {
+  try {
+    const params = new URLSearchParams({
+      action: "query",
+      format: "json",
+      origin: "*",
+      generator: "search",
+      gsrsearch: `${query} filetype:bitmap|drawing|video`,
+      gsrnamespace: "6",
+      gsrlimit: String(Math.min(perPage, 8)),
+      prop: "imageinfo",
+      iiprop: "url|mime|size|extmetadata",
+      iiurlwidth: "420",
+    });
+    const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
+    if (!response.ok) return { source: "Wikimedia Commons", error: `Commons error ${response.status}`, results: [] };
+    const data = await response.json();
+    const pages = Object.values(data.query?.pages || {});
+    const results = pages.map((page) => {
+      const info = page.imageinfo?.[0] || {};
+      const meta = info.extmetadata || {};
+      return {
+        id: `commons-${page.pageid}`,
+        source: "Wikimedia Commons",
+        policy: POLICIES.COMMONS,
+        title: page.title || "Commons media",
+        creator: meta.Artist?.value?.replace(/<[^>]+>/g, "") || "Wikimedia Commons",
+        sourcePage: commonsFilePage(page.title),
+        duration: (info.mime || "").includes("video") ? "Video" : "Photo",
+        width: info.width || 0,
+        height: info.height || 0,
+        thumbnail: info.thumburl || commonsImageUrl(page.title),
+        directUrl: info.url || "",
+        actionLabel: "Open file",
+        attribution: meta.Credit?.value?.replace(/<[^>]+>/g, "") || `Wikimedia Commons: ${page.title}`,
+      };
+    });
+    return { source: "Wikimedia Commons", error: null, results: uniqueResults(results, perPage) };
+  } catch (error) {
+    return { source: "Wikimedia Commons", error: error.message, results: [] };
+  }
+}
+async function searchInternetArchive({ query, perPage }) {
+  try {
+    const q = `(${query}) AND mediatype:(movies OR image)`;
+    const params = new URLSearchParams({ q, fl: "identifier,title,creator,mediatype", rows: String(Math.min(perPage, 6)), page: "1", output: "json" });
+    const response = await fetch(`https://archive.org/advancedsearch.php?${params}`);
+    if (!response.ok) return { source: "Internet Archive", error: `Archive error ${response.status}`, results: [] };
+    const data = await response.json();
+    const docs = data.response?.docs || [];
+    const results = await Promise.all(docs.map(async (doc) => {
+      let directUrl = "";
+      try {
+        const meta = await fetch(`https://archive.org/metadata/${encodeURIComponent(doc.identifier)}`).then((r) => r.json());
+        directUrl = directFileFromArchive(doc.identifier, meta.files || []);
+      } catch (_) {}
+      return {
+        id: `archive-${doc.identifier}`,
+        source: "Internet Archive",
+        policy: POLICIES.ARCHIVE,
+        title: doc.title || doc.identifier,
+        creator: Array.isArray(doc.creator) ? doc.creator.join(", ") : (doc.creator || "Internet Archive"),
+        sourcePage: `https://archive.org/details/${doc.identifier}`,
+        duration: doc.mediatype === "movies" ? "Video" : "Archive item",
+        width: 0,
+        height: 0,
+        thumbnail: `https://archive.org/services/img/${doc.identifier}`,
+        directUrl,
+        actionLabel: "Open archive file",
+        attribution: `Internet Archive: ${doc.title || doc.identifier}`,
+      };
+    }));
+    return { source: "Internet Archive", error: null, results: uniqueResults(results, perPage) };
+  } catch (error) {
+    return { source: "Internet Archive", error: error.message, results: [] };
+  }
+}
+async function searchFlickr({ query, perPage }) {
+  const key = process.env.FLICKR_API_KEY;
+  if (!key) return { source: "Flickr", error: "FLICKR_API_KEY is blank. Add it later to enable Flickr photo results.", results: [] };
+  try {
+    const params = new URLSearchParams({ method: "flickr.photos.search", api_key: key, text: query, per_page: String(Math.min(perPage, 6)), page: "1", format: "json", nojsoncallback: "1", safe_search: "1", content_type: "7", extras: "url_m,url_l,url_o,owner_name,license" });
+    const response = await fetch(`https://www.flickr.com/services/rest/?${params}`);
+    if (!response.ok) return { source: "Flickr", error: `Flickr error ${response.status}`, results: [] };
+    const data = await response.json();
+    const results = (data.photos?.photo || []).map((photo) => ({
+      id: `flickr-${photo.id}`,
+      source: "Flickr",
+      policy: POLICIES.FLICKR,
+      title: photo.title || "Flickr photo",
+      creator: photo.ownername || photo.owner || "Flickr user",
+      sourcePage: `https://www.flickr.com/photos/${photo.owner}/${photo.id}`,
+      duration: "Photo",
+      width: 0,
+      height: 0,
+      thumbnail: photo.url_m || photo.url_l || photo.url_o || "",
+      directUrl: photo.url_o || photo.url_l || photo.url_m || "",
+      actionLabel: "Open photo",
+      attribution: `Flickr: ${photo.title || photo.id} by ${photo.ownername || photo.owner || "unknown"}`,
+    }));
+    return { source: "Flickr", error: null, results: uniqueResults(results, perPage) };
+  } catch (error) {
+    return { source: "Flickr", error: error.message, results: [] };
+  }
+}
+async function searchGiphy({ query, perPage }) {
+  const key = process.env.GIPHY_API_KEY;
+  if (!key) return { source: "GIPHY", error: "GIPHY_API_KEY is blank. Add it later to enable GIF results.", results: [] };
+  try {
+    const params = new URLSearchParams({ api_key: key, q: query, limit: String(Math.min(perPage, 6)), rating: "g", lang: "en" });
+    const response = await fetch(`https://api.giphy.com/v1/gifs/search?${params}`);
+    if (!response.ok) return { source: "GIPHY", error: `GIPHY error ${response.status}`, results: [] };
+    const data = await response.json();
+    const results = (data.data || []).map((gif) => ({
+      id: `giphy-${gif.id}`,
+      source: "GIPHY",
+      policy: POLICIES.GIPHY,
+      title: gif.title || "GIPHY media",
+      creator: gif.username || "GIPHY",
+      sourcePage: gif.url || "https://giphy.com/",
+      duration: "GIF",
+      width: gif.images?.original?.width || 0,
+      height: gif.images?.original?.height || 0,
+      thumbnail: gif.images?.fixed_width_small?.url || gif.images?.preview_gif?.url || "",
+      directUrl: gif.images?.original?.mp4 || gif.images?.original?.url || "",
+      actionLabel: "Open GIF",
+      attribution: `GIPHY: ${gif.title || gif.id}`,
+    }));
+    return { source: "GIPHY", error: null, results: uniqueResults(results, perPage) };
+  } catch (error) {
+    return { source: "GIPHY", error: error.message, results: [] };
   }
 }
 
@@ -755,11 +1000,17 @@ function buildTimelineSearchTerms(text, orientation = "any", topic = "") {
 async function searchTimelineItem(item, orientation, perTimestamp, topic = "", guide = "") {
   const terms = buildTimelineSearchTerms(`${guide} ${item.text}`, orientation, topic);
   const primaryQuery = terms[0] || item.text;
-  const [pexels, pixabay, youtube, unsplash] = await Promise.all([
+  const [pexels, pixabay, youtube, unsplash, openverse, nasa, commons, archive, flickr, giphy] = await Promise.all([
     searchPexels({ query: primaryQuery, orientation, perPage: perTimestamp }),
     searchPixabay({ query: primaryQuery, orientation, perPage: perTimestamp }),
     searchYouTube({ query: primaryQuery, perPage: perTimestamp }),
     searchUnsplash({ query: primaryQuery, orientation, perPage: perTimestamp }),
+    searchOpenverse({ query: primaryQuery, perPage: perTimestamp }),
+    searchNasaLibrary({ query: primaryQuery, perPage: perTimestamp }),
+    searchWikimedia({ query: primaryQuery, perPage: perTimestamp }),
+    searchInternetArchive({ query: primaryQuery, perPage: perTimestamp }),
+    searchFlickr({ query: primaryQuery, perPage: perTimestamp }),
+    searchGiphy({ query: primaryQuery, perPage: perTimestamp }),
   ]);
 
   const visual = inferMediaIntent(`${topic} ${guide} ${item.text}`);
@@ -770,7 +1021,18 @@ async function searchTimelineItem(item, orientation, perTimestamp, topic = "", g
     visualNote: visual.note,
     searchTerms: terms,
     canvaTerms: createCanvaToolkit(primaryQuery, orientation).categories.slice(0, 1).map((group) => ({ ...group, terms: group.terms.slice(0, 3) })),
-    results: { pexels, pixabay, youtube, unsplash },
+    results: {
+      pexels: withUniqueResults(pexels, perTimestamp),
+      pixabay: withUniqueResults(pixabay, perTimestamp),
+      youtube: withUniqueResults(youtube, perTimestamp),
+      unsplash: withUniqueResults(unsplash, perTimestamp),
+      openverse: withUniqueResults(openverse, perTimestamp),
+      nasa: withUniqueResults(nasa, perTimestamp),
+      commons: withUniqueResults(commons, perTimestamp),
+      archive: withUniqueResults(archive, perTimestamp),
+      flickr: withUniqueResults(flickr, perTimestamp),
+      giphy: withUniqueResults(giphy, perTimestamp),
+    },
   };
 }
 

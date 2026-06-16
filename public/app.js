@@ -24,6 +24,7 @@ const adminContent = document.getElementById("adminContent");
 
 let latestTimelineItems = [];
 let latestTimelineContext = { topic: "", guide: "", niche: "general", orientation: "any" };
+const SOURCE_KEYS = ["pexels", "pixabay", "youtube", "unsplash", "openverse", "nasa", "commons", "archive", "flickr", "giphy"];
 let selectedDownloads = [];
 const HISTORY_KEY = "elias_media_history_v1";
 const STATS_KEY = "elias_media_stats_v1";
@@ -122,7 +123,7 @@ function downloadWord(filename, html) {
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 function timelineToCsvRows(items) {
-  const rows = [["Timestamp", "Script line", "Visual type", "Visual note", "Search term 1", "Search term 2", "Search term 3", "Pexels link", "Pixabay link", "YouTube reference", "Unsplash link", "CapCut note", "Suggested SFX"]];
+  const rows = [["Timestamp", "Script line", "Visual type", "Visual note", "Search term 1", "Search term 2", "Search term 3", "Pexels", "Pixabay", "YouTube", "Unsplash", "Openverse", "NASA", "Wikimedia", "Archive", "Flickr", "GIPHY", "CapCut note", "Suggested SFX"]];
   (items || []).forEach((item) => {
     const getFirst = (key) => item.results?.[key]?.results?.[0]?.sourcePage || "";
     const edit = inferEditGuide(item);
@@ -360,9 +361,10 @@ function renderApiResults(api) {
   selectedDownloads = [];
   apiResults.innerHTML = "";
   const enabled = getEnabledSources('.src-filter');
-  [api.pexels, api.pixabay, api.youtube, api.unsplash].filter(Boolean).forEach((sourceData) => {
+  SOURCE_KEYS.map((key) => api[key]).filter(Boolean).forEach((sourceData) => {
     const key = (sourceData.source || '').toLowerCase();
-    if (enabled.some((name) => key.includes(name))) apiResults.appendChild(renderApiSource(sourceData));
+    const sourceLabel = (sourceData.source || "").toLowerCase();
+    if (enabled.some((name) => sourceLabel.includes(name) || (name === "commons" && sourceLabel.includes("wikimedia")) || (name === "archive" && sourceLabel.includes("internet archive")))) apiResults.appendChild(renderApiSource(sourceData));
   });
   apiSection.classList.remove("hidden");
   attachCopyHandlers(apiResults);
@@ -419,7 +421,7 @@ function renderTimelineCard(item, index) {
   const edit = inferEditGuide(item);
   const terms = (item.searchTerms || []).map((term) => `<button type="button" class="canva-chip" data-copy-term="${escapeAttribute(term)}">${escapeHtml(term)}</button>`).join("");
   const enabled = getEnabledSources('.timeline-src-filter');
-  const sourceBlocks = ["pexels", "pixabay", "youtube", "unsplash"].filter((key) => enabled.includes(key)).map((key) => {
+  const sourceBlocks = SOURCE_KEYS.filter((key) => enabled.includes(key)).map((key) => {
     const source = item.results?.[key];
     if (!source) return "";
     const cards = (source.results || []).slice(0, 3).map(renderCompactCard).join("");

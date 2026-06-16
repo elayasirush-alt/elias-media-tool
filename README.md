@@ -86,3 +86,8 @@ Canva is still handled as a helper/search workflow. Full Canva account integrati
 ## Ultimate workflow extras
 
 This version adds source checkboxes, local project history, a simple local admin dashboard, multi-select media downloads, Word/PDF/CSV guide export, thumbnail suggestions, CapCut editing notes, Canva search links per timestamp, and music/sound helper links.
+
+
+## Complete 10-source version
+
+This version reduces repeated media results and adds up to 10 direct result sources: Pexels, Pixabay, YouTube references, Unsplash, Openverse, NASA Image and Video Library, Wikimedia Commons, Internet Archive, Flickr, and GIPHY. Flickr and GIPHY require optional API keys. YouTube remains reference-only. Always check each source license before publishing.
