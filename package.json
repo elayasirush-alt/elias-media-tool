@@ -1,18 +1,17 @@
 {
-  "name": "elias-media",
+  "name": "elias-media-timestamped-audio-video-generator",
   "version": "1.0.0",
-  "description": "Elias Media public dashboard with timestamp media search, official download buttons, guide export, and password protection.",
+  "description": "Generate draft videos from timestamped scripts and voiceover audio using stock media and FFmpeg.",
   "type": "module",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
-  },
-  "engines": {
-    "node": ">=18"
+    "express": "^4.19.2",
+    "ffmpeg-static": "^5.2.0",
+    "multer": "^1.4.5-lts.1"
   }
 }
